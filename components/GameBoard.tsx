@@ -113,7 +113,7 @@ export default function GameBoard() {
 
   const copyInvite = async () => {
     if (!roomCode || typeof window === "undefined") return;
-    const url = `${window.location.origin}/join?code=${roomCode}`;
+    const url = `${window.location.origin}/?join=${roomCode}`;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);

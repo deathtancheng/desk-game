@@ -1,15 +1,25 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useGameStore } from "@/store/gameStore";
 import ImportScreen from "./ImportScreen";
 import CompileScreen from "./CompileScreen";
 import LobbyScreen from "./LobbyScreen";
 import GameBoard from "./GameBoard";
 import SettlementScreen from "./SettlementScreen";
+import JoinScreen from "./JoinScreen";
 
 export default function QunxiApp() {
   const screen = useGameStore((state) => state.screen);
   const reset = useGameStore((state) => state.reset);
+  const [joinMode, setJoinMode] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setJoinMode(Boolean(params.get("join") || params.get("code")));
+  }, []);
+
+  if (joinMode) return <JoinScreen />;
 
   return (
     <main className="relative min-h-screen overflow-hidden">

@@ -1,3 +1,4 @@
+import { cloudApiBase } from "./apiBase";
 import type { PersonaJudgeRequest, PersonaVerdict } from "./types";
 
 const JUDGE_TIMEOUT_MS = 9000;
@@ -9,7 +10,7 @@ export async function judgePersonaBatch(
   const timeout = setTimeout(() => controller.abort(), JUDGE_TIMEOUT_MS);
 
   try {
-    const response = await fetch("/api/persona", {
+    const response = await fetch(`${cloudApiBase()}/persona`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),

@@ -1,3 +1,4 @@
+import { cloudApiBase } from "./apiBase";
 import type { ActionChoice, GameState, RoomView } from "./types";
 
 const CLIENT_KEY = "qunxi-cloud-client-id";
@@ -21,7 +22,7 @@ export async function createCloudRoom(
   humanIds: string[],
   groupName: string,
 ): Promise<RoomView> {
-  const response = await fetch("/api/rooms", {
+  const response = await fetch(`${cloudApiBase()}/rooms`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ hostId, humanIds, groupName }),
@@ -32,7 +33,7 @@ export async function createCloudRoom(
 
 export async function fetchCloudRoom(code: string, clientId?: string): Promise<RoomView | null> {
   const query = clientId ? `?clientId=${encodeURIComponent(clientId)}` : "";
-  const response = await fetch(`/api/rooms/${encodeURIComponent(code)}${query}`, {
+  const response = await fetch(`${cloudApiBase()}/rooms/${encodeURIComponent(code)}${query}`, {
     cache: "no-store",
   });
   if (response.status === 404) return null;
@@ -45,7 +46,7 @@ export async function joinCloudRoom(
   clientId: string,
   memberId: string,
 ): Promise<RoomView> {
-  const response = await fetch(`/api/rooms/${encodeURIComponent(code)}/join`, {
+  const response = await fetch(`${cloudApiBase()}/rooms/${encodeURIComponent(code)}/join`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ clientId, memberId }),
@@ -60,7 +61,7 @@ export async function submitCloudAction(
   memberId: string,
   action: ActionChoice,
 ): Promise<void> {
-  const response = await fetch(`/api/rooms/${encodeURIComponent(code)}/action`, {
+  const response = await fetch(`${cloudApiBase()}/rooms/${encodeURIComponent(code)}/action`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ clientId, memberId, action }),
@@ -73,7 +74,7 @@ export async function publishCloudState(
   hostId: string,
   state: GameState,
 ): Promise<void> {
-  const response = await fetch(`/api/rooms/${encodeURIComponent(code)}/state`, {
+  const response = await fetch(`${cloudApiBase()}/rooms/${encodeURIComponent(code)}/state`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ hostId, state }),
@@ -86,7 +87,7 @@ export async function ackCloudAction(
   hostId: string,
   actionId: string,
 ): Promise<void> {
-  const response = await fetch(`/api/rooms/${encodeURIComponent(code)}/ack`, {
+  const response = await fetch(`${cloudApiBase()}/rooms/${encodeURIComponent(code)}/ack`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ hostId, actionId }),

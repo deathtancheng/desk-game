@@ -25,7 +25,7 @@ export default function LobbyScreen() {
 
   const copyInvite = async () => {
     if (!roomCode || typeof window === "undefined") return;
-    const url = `${window.location.origin}/join?code=${roomCode}`;
+    const url = `${window.location.origin}/?join=${roomCode}`;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -182,7 +182,7 @@ export default function LobbyScreen() {
                   </button>
                   <a
                     className="btn-ghost !py-2 text-[10px]"
-                    href={`/join?code=${roomCode}`}
+                    href={`/?join=${roomCode}`}
                     target="_blank"
                     rel="noreferrer"
                   >

@@ -13,26 +13,79 @@ const KEYWORD_GROUPS = {
   memes: ["笑死", "哈哈哈哈", "绷不住", "逆天", "离谱", "这波不亏", "问题不大", "救命"],
 };
 
+function cleanName(value: string): string {
+  return value.replace(/[（(]\d+[）)]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function blockHeader(line: string): { name: string; time?: string } | null {
+  const colonOnly = line.match(/^([^:：]{1,16})[:：]\s*$/);
+  if (colonOnly) return { name: cleanName(colonOnly[1]) };
+
+  const wechatTime = line.match(
+    /^([^:：]{1,16})\s+(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)$/,
+  );
+  if (wechatTime) return { name: cleanName(wechatTime[1]), time: wechatTime[2] };
+
+  const qqHeader = line.match(
+    /^(\d{4}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)\s+(.+?)(?:[（(]\d+[）)])?$/,
+  );
+  if (qqHeader) return { name: cleanName(qqHeader[2]), time: qqHeader[1] };
+
+  return null;
+}
+
 export function parseChat(raw: string): ParsedLine[] {
-  const lines = raw.split(/\r?\n/);
+  const text = raw.replace(/^\uFEFF/, "");
+  const lines = text.split(/\r?\n/);
   const parsed: ParsedLine[] = [];
+  let current: ParsedLine | null = null;
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
+  const flush = () => {
+    if (current && current.text.trim()) {
+      parsed.push({ ...current, name: cleanName(current.name), text: current.text.trim() });
+    }
+    current = null;
+  };
 
-    const bracketed = trimmed.match(/^\[(.+?)\]\s*([^:：]{1,16})[:：]\s*(.+)$/);
-    if (bracketed) {
-      parsed.push({ time: bracketed[1], name: bracketed[2].trim(), text: bracketed[3].trim() });
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (current) {
+      const header = blockHeader(line);
+      if (header) {
+        flush();
+        current = { name: header.name, time: header.time, text: "" };
+      } else if (line) {
+        current.text += `${current.text ? "\n" : ""}${line}`;
+      }
       continue;
     }
 
-    const simple = trimmed.match(/^([^:：]{1,16})[:：]\s*(.+)$/);
+    if (!line) continue;
+
+    const bracketed = line.match(/^\[(.+?)\]\s*([^:：]{1,16})[:：]\s*(.+)$/);
+    if (bracketed) {
+      parsed.push({
+        time: bracketed[1],
+        name: cleanName(bracketed[2]),
+        text: bracketed[3].trim(),
+      });
+      continue;
+    }
+
+    const header = blockHeader(line);
+    if (header) {
+      current = { name: header.name, time: header.time, text: "" };
+      continue;
+    }
+
+    const simple = line.match(/^([^:：]{1,16})[:：]\s*(.+)$/);
     if (simple) {
-      parsed.push({ name: simple[1].trim(), text: simple[2].trim() });
+      parsed.push({ name: cleanName(simple[1]), text: simple[2].trim() });
     }
   }
 
+  flush();
   return parsed;
 }
 

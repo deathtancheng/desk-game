@@ -8,6 +8,7 @@ import type {
   PersonaVerdict,
   PlayerState,
   RoundResult,
+  SkillKey,
 } from "./types";
 import { decideGhost } from "./ghostAI";
 import { judgePersonaBatch } from "./personaClient";
@@ -34,6 +35,10 @@ function getPlayer(game: GameState, memberId?: string): PlayerState | undefined 
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function skillUsedBy(game: GameState, key: SkillKey): boolean {
+  return game.players.some((player) => player.played?.useSkill && player.skillKey === key);
 }
 
 function buildGoal(
@@ -123,6 +128,10 @@ export function createGame(config: GameConfig, humanIds: string[]): GameState {
       tokens: 3,
       ...goal,
       goalDone: false,
+      skillKey: member.skill.key,
+      skillName: member.skill.name,
+      skillDesc: member.skill.desc,
+      skillUsed: false,
       personaHits: 0,
       ooc: 0,
       scapegoat: 0,
@@ -210,15 +219,30 @@ function describeAction(game: GameState, player: PlayerState, choice: ActionChoi
 }
 
 function applyPlayerAction(game: GameState, player: PlayerState, choice: ActionChoice, ghost = false): void {
-  player.played = choice;
-  player.actionHistory.push(choice);
+  const effectiveChoice: ActionChoice =
+    choice.useSkill && player.skillUsed ? { ...choice, useSkill: false } : choice;
   const member = getMember(game, player.memberId);
+
+  if (effectiveChoice.useSkill) {
+    player.skillUsed = true;
+    game.log.push({
+      id: uid("skill"),
+      kind: "host",
+      author: "群主",
+      emoji: "📣",
+      text: `${member.name} 发动人设技能「${player.skillName}」`,
+      tone: "glow",
+    });
+  }
+
+  player.played = effectiveChoice;
+  player.actionHistory.push(effectiveChoice);
   game.log.push({
     id: uid("act"),
     kind: "player",
     author: member.name,
     emoji: member.emoji,
-    text: `${describeAction(game, player, choice)}${ghost ? "（幽灵群友）" : ""}`,
+    text: `${describeAction(game, player, effectiveChoice)}${ghost ? "（幽灵群友）" : ""}`,
   });
 }
 
@@ -340,6 +364,12 @@ function resolveNegotiation(game: GameState): { headline: string; detail: string
     `任务难度 ${difficulty}，${targetMember.name} 靠谱度 ${targetMember.stats.reliability}`,
   ];
 
+  const forcedPass = skillUsedBy(game, "force_proposal");
+  if (forcedPass) {
+    passed = true;
+    lines.push("人设技能「拉个群」生效：提案直接通过。");
+  }
+
   let headline: string;
   let detail: string;
 
@@ -363,7 +393,10 @@ function resolveNegotiation(game: GameState): { headline: string; detail: string
       lines.push("任务完成：今晚的群聊恢复了和平。");
     }
   } else {
-    for (const player of players) player.gp -= 1;
+    const saved = skillUsedBy(game, "save_group");
+    if (!saved) {
+      for (const player of players) player.gp -= 1;
+    }
     const victim = [...players].sort((a, b) => {
       const reliabilityDiff =
         getMember(game, a.memberId).stats.reliability - getMember(game, b.memberId).stats.reliability;
@@ -373,8 +406,9 @@ function resolveNegotiation(game: GameState): { headline: string; detail: string
     victim.gp -= 3;
     victim.scapegoat += 1;
     headline = "没人接活";
-    detail = `全群 -1；${getMember(game, victim.memberId).name} 被群主点名背锅 -3。`;
+    detail = `${saved ? "老好人兜底，全群免扣" : "全群 -1"}；${getMember(game, victim.memberId).name} 被群主点名背锅 -3。`;
     lines.push("结局：外卖凉了，群聊安静了 4 分钟。");
+    if (saved) lines.push("人设技能「老好人」生效：全群免扣。");
   }
 
   return { headline, detail, lines };
@@ -500,11 +534,15 @@ function resolveEscape(game: GameState): { headline: string; detail: string; lin
     detail = `全群 +1；${getMember(game, mvp.memberId).name} 出力最高 +2。`;
     lines.push(`最低贡献：${getMember(game, loser.memberId).name}（${minAmount} 点，摸鱼标记）`);
   } else {
-    for (const player of game.players) player.gp -= 1;
+    const saved = skillUsedBy(game, "save_group");
+    if (!saved) {
+      for (const player of game.players) player.gp -= 1;
+    }
     loser.gp -= 2;
     loser.scapegoat += 1;
     headline = "挑战失败";
-    detail = `全群 -1；${getMember(game, loser.memberId).name} 背锅 -2。`;
+    detail = `${saved ? "老好人兜底，全群免扣" : "全群 -1"}；${getMember(game, loser.memberId).name} 背锅 -2。`;
+    if (saved) lines.push("人设技能「老好人」生效：全群免扣。");
 
     const blameActions = loser.actionHistory.filter((action) => action.kind === "blame");
     const blameTarget = getPlayer(game, loser.played?.targetId);
@@ -529,6 +567,13 @@ function applyVerdict(
 ): void {
   const delta = verdict.delta === 1 ? 1 : verdict.delta === -1 ? -1 : 0;
   if (delta === 0) return;
+
+  if (delta === -1 && player.played?.useSkill && player.skillKey === "immune_ooc") {
+    const line = `${member.name} 发动「这波不亏」，出戏判定无效`;
+    lines.push(line);
+    game.log.push({ id: uid("skill"), kind: "host", author: "群主", emoji: "📣", text: line, tone: "good" });
+    return;
+  }
 
   const label = player.played ? actionLabel(player.played) : "行动";
   const validTag = verdict.tag && member.tags.includes(verdict.tag) ? verdict.tag : undefined;
@@ -677,6 +722,40 @@ function evaluateGoals(game: GameState): string[] {
   return lines;
 }
 
+function applySkillEffects(game: GameState): string[] {
+  const lines: string[] = [];
+  const push = (line: string) => {
+    lines.push(line);
+    game.log.push({ id: uid("skill"), kind: "host", author: "群主", emoji: "📣", text: line, tone: "glow" });
+  };
+
+  for (const player of game.players) {
+    if (!player.played?.useSkill) continue;
+    const member = getMember(game, player.memberId);
+
+    if (player.skillKey === "extra_gp") {
+      player.gp += 2;
+      push(`${member.name} 发动「这单我熟」，+2 群地位`);
+    } else if (player.skillKey === "radio") {
+      for (const target of game.players) target.gp += 1;
+      player.gp += 2;
+      push(`${member.name} 发动「深夜电台」，全场 +1，自己 +2`);
+    } else if (player.skillKey === "slack_bonus") {
+      const slack =
+        player.played.kind === "pass" ||
+        player.played.kind === "abstain" ||
+        player.played.kind === "blame" ||
+        (player.played.kind === "contribute" && (player.played.contribution ?? 0) === 0);
+      if (slack) {
+        player.gp += 1;
+        push(`${member.name} 发动「真·装死」，+1 群地位`);
+      }
+    }
+  }
+
+  return lines;
+}
+
 async function resolveRound(game: GameState): Promise<GameState> {
   const next = clone(game);
 
@@ -696,6 +775,7 @@ async function resolveRound(game: GameState): Promise<GameState> {
 
   const persona = await applyPersonaChecksWithLLM(next);
   const personaLines = persona.lines;
+  const skillLines = applySkillEffects(next);
   const goalLines = next.round >= next.config.rounds ? evaluateGoals(next) : [];
   const deltas: Record<string, number> = {};
   for (const player of next.players) {
@@ -706,7 +786,7 @@ async function resolveRound(game: GameState): Promise<GameState> {
     round: next.round,
     headline: base.headline,
     detail: base.detail,
-    lines: [...base.lines, ...personaLines, ...goalLines],
+    lines: [...base.lines, ...personaLines, ...skillLines, ...goalLines],
     deltas,
     personaLine: personaLines[0],
     judgeSource: persona.source,

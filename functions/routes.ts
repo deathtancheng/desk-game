@@ -205,6 +205,9 @@ export function application({ db, BackendError }: Dependencies) {
 
     const room = await mutateRoom(code, (current) => {
       if (!current.humanIds.includes(memberId)) fail("invalid_member", 400);
+      if (current.players.some((player) => player.clientId === clientId && player.memberId !== memberId)) {
+        fail("already_joined", 409);
+      }
       const existing = current.players.find((player) => player.memberId === memberId);
       if (existing) {
         if (existing.clientId !== clientId) fail("seat_taken", 409);
@@ -291,6 +294,22 @@ export function application({ db, BackendError }: Dependencies) {
     return Response.json({ ok: true, version: room.version });
   }
 
+  async function closeRoom(code: string, request: Request): Promise<Response> {
+    const body = await readJson(request);
+    const hostId = body?.hostId;
+    if (typeof hostId !== "string" || !hostId) {
+      fail("invalid_input", 400);
+    }
+
+    const row = await readRoom(code);
+    if (!row) fail("room_not_found", 404);
+    if (roomOf(row).hostId !== hostId) fail("host_only", 403);
+
+    const result = await db.from("qunxi_rooms").delete().eq("code", code).select("code");
+    if (rows(result).length === 0) fail("room_not_found", 404);
+    return Response.json({ ok: true });
+  }
+
   return async (context: { request: Request }): Promise<Response> => {
     const request = context.request;
     const url = new URL(request.url);
@@ -327,6 +346,7 @@ export function application({ db, BackendError }: Dependencies) {
       if (suffix === "/action" && method === "POST") return submitAction(code, request);
       if (suffix === "/state" && method === "POST") return publishState(code, request);
       if (suffix === "/ack" && method === "POST") return ackAction(code, request);
+      if (suffix === "/close" && method === "POST") return closeRoom(code, request);
     }
 
     fail("not_found", 404);

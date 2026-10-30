@@ -83,3 +83,10 @@ export function touchRoom(room: Room): void {
   room.updatedAt = Date.now();
   room.version += 1;
 }
+
+export function removeRoom(code: string, hostId: string): boolean {
+  const room = rooms.get(code.trim().toUpperCase());
+  if (!room || room.hostId !== hostId) return false;
+  rooms.delete(room.code);
+  return true;
+}

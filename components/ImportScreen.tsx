@@ -1,7 +1,9 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { DEMO_CHAT, DEMO_GROUP_NAME, DEMO_MEMBERS } from "@/lib/demoData";
+import { parseChat } from "@/lib/parser";
 import { useGameStore } from "@/store/gameStore";
 
 const FEATURES = [
@@ -26,10 +28,53 @@ export default function ImportScreen() {
   const setRawChat = useGameStore((state) => state.setRawChat);
   const useDemo = useGameStore((state) => state.useDemo);
   const compile = useGameStore((state) => state.compile);
+  const [importError, setImportError] = useState("");
+  const [importedFrom, setImportedFrom] = useState("");
+  const [helpOpen, setHelpOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const parsed = useMemo(() => parseChat(rawChat), [rawChat]);
+  const parsedNames = useMemo(() => [...new Set(parsed.map((line) => line.name))], [parsed]);
 
   const fillDemo = () => {
     useDemo();
     setRawChat(DEMO_CHAT);
+    setImportedFrom("示例群");
+    setImportError("");
+  };
+
+  const stripHtml = (raw: string): string => {
+    const start = raw.search(/<!doctype|<html/i);
+    const html = start >= 0 ? raw.slice(start) : raw;
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return doc.body.innerText || doc.body.textContent || "";
+  };
+
+  const readFile = async (file: File) => {
+    try {
+      const text = await file.text();
+      const looksLikeHtml = /\.(html?|mht)$/i.test(file.name) || /<html|<body|<div/i.test(text);
+      setRawChat(looksLikeHtml ? stripHtml(text) : text);
+      setImportedFrom(file.name);
+      setImportError("");
+    } catch {
+      setImportError("读取文件失败，试试复制文本后直接粘贴。");
+    }
+  };
+
+  const readClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) {
+        setImportError("剪贴板是空的，先在微信/QQ 里多选消息并复制。");
+        return;
+      }
+      setRawChat(text);
+      setImportedFrom("剪贴板");
+      setImportError("");
+    } catch {
+      setImportError("浏览器没给剪贴板权限，直接粘贴到输入框也可以。");
+    }
   };
 
   return (
@@ -175,9 +220,31 @@ export default function ImportScreen() {
               <div className="text-[10px] tracking-[0.24em] text-muted">第一步 · 导入</div>
               <h2 className="mt-1 font-serif text-lg font-bold">把聊天记录倒进来</h2>
             </div>
-            <button className="btn-ghost !px-3 !py-2 text-xs" onClick={fillDemo}>
-              填入示例群
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,.md,.html,.htm,.mht"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void readFile(file);
+                  event.target.value = "";
+                }}
+              />
+              <button className="btn-ghost !px-3 !py-2 text-xs" onClick={readClipboard}>
+                从剪贴板
+              </button>
+              <button className="btn-ghost !px-3 !py-2 text-xs" onClick={() => fileInputRef.current?.click()}>
+                上传文件
+              </button>
+              <button className="btn-ghost !px-3 !py-2 text-xs" onClick={() => setHelpOpen(true)}>
+                怎么导出？
+              </button>
+              <button className="btn-ghost !px-3 !py-2 text-xs" onClick={fillDemo}>
+                填入示例群
+              </button>
+            </div>
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_180px]">
@@ -192,9 +259,9 @@ export default function ImportScreen() {
             </label>
             <div className="flex items-end">
               <div className="w-full rounded-xl border border-line/60 bg-panel2/40 px-3 py-2.5 text-[10px] leading-5 text-muted">
-                支持微信 / QQ 文本
+                QQ 导出 .txt / .mht
                 <br />
-                也可直接点“填入示例群”
+                微信复制文本 / 剪贴板
               </div>
             </div>
           </div>
@@ -212,6 +279,24 @@ export default function ImportScreen() {
               className="chat-scroll w-full resize-none rounded-xl border border-line bg-ink/50 px-3.5 py-3 font-mono text-xs leading-6 text-white/80 outline-none transition placeholder:text-white/20 focus:border-neon/50"
             />
           </label>
+
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
+            {parsed.length > 0 ? (
+              <span className={parsed.length >= 8 ? "text-mint" : "text-ember"}>
+                已识别 {parsed.length} 条 / {parsedNames.length} 人
+              </span>
+            ) : (
+              <span className="text-muted">还没识别到消息</span>
+            )}
+            {importedFrom && <span className="text-muted">· 来源：{importedFrom}</span>}
+            {rawChat && parsed.length === 0 && (
+              <span className="text-ember">· 格式没认出来，点“怎么导出？”看示例</span>
+            )}
+            {parsed.length > 0 && parsed.length < 8 && (
+              <span className="text-ember">· 少于 8 条，编译时会用示例群</span>
+            )}
+            {importError && <span className="text-ember">· {importError}</span>}
+          </div>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="flex items-center gap-2 text-[10px] leading-4 text-muted">
@@ -257,6 +342,58 @@ export default function ImportScreen() {
           </div>
         </div>
       </motion.section>
+
+      <AnimatePresence>
+        {helpOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 p-5 backdrop-blur"
+            onClick={() => setHelpOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.94, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.96, y: 6 }}
+              className="max-h-[86vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-panel p-5 shadow-paper"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="font-serif text-xl font-bold">怎么把聊天导进来</div>
+              <p className="mt-1 text-[10px] text-muted">微信没有官方明文导出；QQ 可以直接导出文件。</p>
+
+              <div className="mt-5 space-y-4 text-[11px] leading-5">
+                <div>
+                  <div className="font-semibold text-neon">QQ：直接导出文件</div>
+                  <ol className="mt-1 list-decimal space-y-1 pl-4 text-white/65">
+                    <li>电脑 QQ 左下角主菜单 → 消息管理 → 选择群</li>
+                    <li>右键“导出消息记录” → 选 .txt（推荐）或 .mht</li>
+                    <li>回到这里点“上传文件”，选刚导出的文件</li>
+                  </ol>
+                </div>
+
+                <div>
+                  <div className="font-semibold text-neon">微信：复制文本 / 剪贴板</div>
+                  <ol className="mt-1 list-decimal space-y-1 pl-4 text-white/65">
+                    <li>电脑微信打开群聊 → 多选消息 → 复制</li>
+                    <li>回到这里点“从剪贴板”</li>
+                    <li>手机微信可以“多选 → 合并转发 → 复制”再粘贴</li>
+                  </ol>
+                </div>
+
+                <div className="rounded-xl border border-line/60 bg-ink/30 p-3 text-[10px] leading-5 text-muted">
+                  微信“聊天记录备份”是加密文件，暂不支持直接读取；复制文本是最稳的方式。
+                  聊天只在本地解析，不上传原文。
+                </div>
+              </div>
+
+              <button className="btn-primary mt-5 w-full !py-2.5 text-xs" onClick={() => setHelpOpen(false)}>
+                知道了
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

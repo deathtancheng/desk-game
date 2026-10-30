@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ackCloudAction, fetchCloudRoom, publishCloudState } from "@/lib/cloudClient";
 import { getMemberOf, getRoundPrompt } from "@/lib/gameEngine";
+import type { ActionChoice, RoomPlayer } from "@/lib/types";
 import { useGameStore } from "@/store/gameStore";
 import ActionPanel from "./ActionPanel";
 import ChatMessage from "./ChatMessage";
@@ -23,10 +24,12 @@ export default function GameBoard() {
   const roomCode = useGameStore((state) => state.roomCode);
   const cloudClientId = useGameStore((state) => state.cloudClientId);
   const cloudHostMemberId = useGameStore((state) => state.cloudHostMemberId);
+  const closeCloudRoom = useGameStore((state) => state.closeCloudRoom);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [seconds, setSeconds] = useState(60);
   const [showGoal, setShowGoal] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [cloudPlayers, setCloudPlayers] = useState<RoomPlayer[]>([]);
   const gameRef = useRef(game);
   const judgingRef = useRef(judging);
   const processingRef = useRef(false);
@@ -70,6 +73,7 @@ export default function GameBoard() {
 
       try {
         const room = await fetchCloudRoom(roomCode, cloudClientId);
+        if (!cancelled) setCloudPlayers(room?.players ?? []);
         if (!room?.pending?.length) return;
         const currentPlayer = currentGame.players[currentGame.pendingIndex];
         const pending = room.pending.find((item) => item.memberId === currentPlayer?.memberId);
@@ -110,6 +114,23 @@ export default function GameBoard() {
       current.memberId !== cloudHostMemberId &&
       game.phase === "action",
   );
+  const humanCount = game.players.filter((player) => player.isHuman).length;
+  const joinedCount = cloudPlayers.filter((player) =>
+    game.players.some((gamePlayer) => gamePlayer.memberId === player.memberId && gamePlayer.isHuman),
+  ).length;
+  const currentGuestJoined = cloudPlayers.some((player) => player.memberId === current?.memberId);
+  const proxyAction: ActionChoice =
+    game.config.ruleType === "bidding"
+      ? { kind: "abstain" }
+      : game.config.ruleType === "escape"
+        ? { kind: "contribute", contribution: 0 }
+        : { kind: "pass" };
+  const proxyLabel =
+    game.config.ruleType === "bidding"
+      ? "托管：替 TA 弃权"
+      : game.config.ruleType === "escape"
+        ? "托管：替 TA 出 0"
+        : "托管：替 TA 装死";
 
   const copyInvite = async () => {
     if (!roomCode || typeof window === "undefined") return;
@@ -139,7 +160,9 @@ export default function GameBoard() {
                   第 {game.round} / {game.config.rounds} 回合
                 </span>
                 {cloudMode && roomCode && (
-                  <span className="pill !py-0.5 text-neon">云端 {roomCode}</span>
+                  <span className="pill !py-0.5 text-neon">
+                    云端 {roomCode} · {joinedCount}/{humanCount}
+                  </span>
                 )}
               </div>
               <div className="mt-0.5 text-[10px] text-muted">
@@ -154,6 +177,18 @@ export default function GameBoard() {
             {cloudMode && roomCode && (
               <button className="btn-ghost !px-2.5 !py-1.5 text-[9px]" onClick={copyInvite}>
                 {copied ? "已复制" : "邀请"}
+              </button>
+            )}
+            {cloudMode && cloudRole === "host" && (
+              <button
+                className="btn-ghost !px-2.5 !py-1.5 text-[9px] text-ember/80 hover:border-ember/40"
+                onClick={() => {
+                  if (window.confirm("结束当前云端房间？室友会断开，当前对局不会保留。")) {
+                    void closeCloudRoom();
+                  }
+                }}
+              >
+                结束房间
               </button>
             )}
             <div
@@ -219,8 +254,17 @@ export default function GameBoard() {
                 等 {currentMember?.name} 在手机上出牌…
               </div>
               <p className="mt-1 text-[10px] leading-5 text-muted">
-                房主页面别关。对方提交后，牌桌会自动同步。
+                云端 {joinedCount}/{humanCount} 已加入
+                {!currentGuestJoined ? " · 这个位置还没人" : ""}。房主页面别关，对方提交后会自动同步。
               </p>
+              {!currentGuestJoined && (
+                <button
+                  className="btn-ghost mt-3 w-full !py-2 text-[10px]"
+                  onClick={() => chooseAction(proxyAction)}
+                >
+                  {proxyLabel}
+                </button>
+              )}
               <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
                 <div className="h-full w-1/2 animate-pulse rounded-full bg-mint" />
               </div>

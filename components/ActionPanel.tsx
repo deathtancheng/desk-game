@@ -51,12 +51,16 @@ export default function ActionPanel({ game, player, onAction, onShowGoal }: Acti
   const [amount, setAmount] = useState(1);
   const [bid, setBid] = useState(1);
   const [contribution, setContribution] = useState(1);
+  const [useSkill, setUseSkill] = useState(false);
 
   const others = game.players.filter((item) => item.memberId !== player.memberId);
   const lot = game.config.lots[game.round - 1] ?? game.config.lots[game.config.lots.length - 1];
   const challenge =
     game.config.challenges[game.round - 1] ?? game.config.challenges[game.config.challenges.length - 1];
   const privateValue = lot?.values[player.memberId] ?? 1;
+  const skillAvailable =
+    (player.skillKey !== "force_proposal" || game.config.ruleType === "negotiation") &&
+    (player.skillKey !== "save_group" || game.config.ruleType !== "bidding");
 
   useEffect(() => {
     setMode("idle");
@@ -64,7 +68,12 @@ export default function ActionPanel({ game, player, onAction, onShowGoal }: Acti
     setAmount(1);
     setBid(1);
     setContribution(1);
+    setUseSkill(false);
   }, [player.memberId, game.round]);
+
+  const send = (choice: ActionChoice) => {
+    onAction({ ...choice, useSkill: useSkill && skillAvailable && !player.skillUsed });
+  };
 
   if (player.played) {
     return (
@@ -97,6 +106,25 @@ export default function ActionPanel({ game, player, onAction, onShowGoal }: Acti
         </button>
       </div>
 
+      <button
+        type="button"
+        onClick={() => setUseSkill((value) => !value)}
+        disabled={player.skillUsed || !skillAvailable}
+        className={`w-full rounded-xl border px-3 py-2.5 text-left transition disabled:cursor-not-allowed ${
+          useSkill
+            ? "border-neon/60 bg-neon/10"
+            : "border-line/70 bg-panel2/40 hover:border-neon/30"
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] font-semibold text-neon">人设技能 · {player.skillName}</span>
+          <span className={`text-[9px] ${useSkill ? "text-neon" : "text-muted"}`}>
+            {player.skillUsed ? "已使用" : !skillAvailable ? "本模式不可用" : useSkill ? "本回合使用" : "点击启用"}
+          </span>
+        </div>
+        <div className="mt-0.5 text-[9px] leading-4 text-muted">{player.skillDesc}</div>
+      </button>
+
       {game.config.ruleType === "negotiation" && (
         <>
           <div className="grid grid-cols-2 gap-2">
@@ -106,10 +134,10 @@ export default function ActionPanel({ game, player, onAction, onShowGoal }: Acti
               active={mode === "propose"}
               onClick={() => pickMode("propose")}
             />
-            <Tile title="附议" desc="支持当前提案" onClick={() => onAction({ kind: "support" })} />
-            <Tile title="自荐" desc="我来，拿 1 点补偿" onClick={() => onAction({ kind: "volunteer" })} />
+            <Tile title="附议" desc="支持当前提案" onClick={() => send({ kind: "support" })} />
+            <Tile title="自荐" desc="我来，拿 1 点补偿" onClick={() => send({ kind: "volunteer" })} />
             <Tile title="梗料" desc="用真实群梗施压" active={mode === "meme"} onClick={() => pickMode("meme")} />
-            <Tile title="装死" desc="弃权，等下一位" tone="danger" onClick={() => onAction({ kind: "pass" })} />
+            <Tile title="装死" desc="弃权，等下一位" tone="danger" onClick={() => send({ kind: "pass" })} />
           </div>
 
           {mode === "propose" && (
@@ -156,7 +184,7 @@ export default function ActionPanel({ game, player, onAction, onShowGoal }: Acti
                 type="button"
                 className="btn-primary mt-3 w-full !py-2 text-xs"
                 disabled={!targetId}
-                onClick={() => onAction({ kind: "propose", targetId, amount })}
+                onClick={() => send({ kind: "propose", targetId, amount })}
               >
                 发出提案
               </button>
@@ -191,7 +219,7 @@ export default function ActionPanel({ game, player, onAction, onShowGoal }: Acti
                 type="button"
                 className="btn-ghost mt-3 w-full !py-2 text-xs"
                 disabled={!targetId}
-                onClick={() => onAction({ kind: "meme", targetId })}
+                onClick={() => send({ kind: "meme", targetId })}
               >
                 甩出梗料
               </button>
@@ -242,14 +270,14 @@ export default function ActionPanel({ game, player, onAction, onShowGoal }: Acti
             <button
               type="button"
               className="btn-primary mt-3 w-full !py-2 text-xs"
-              onClick={() => onAction({ kind: "bid", bid })}
+              onClick={() => send({ kind: "bid", bid })}
             >
               确认暗标 {bid} 点
             </button>
             <button
               type="button"
               className="mt-2 w-full rounded-lg border border-line/60 bg-panel2/40 px-2 py-2 text-[10px] text-white/55 transition hover:border-neon/30"
-              onClick={() => onAction({ kind: "abstain" })}
+              onClick={() => send({ kind: "abstain" })}
             >
               弃权，直接 +1 点
             </button>
@@ -289,7 +317,7 @@ export default function ActionPanel({ game, player, onAction, onShowGoal }: Acti
                 type="button"
                 className="btn-ghost mt-3 w-full !py-2 text-xs"
                 disabled={!targetId}
-                onClick={() => onAction({ kind: "coalition", targetId })}
+                onClick={() => send({ kind: "coalition", targetId })}
               >
                 发出联合邀请
               </button>
@@ -345,7 +373,7 @@ export default function ActionPanel({ game, player, onAction, onShowGoal }: Acti
               <button
                 type="button"
                 className="btn-primary mt-3 w-full !py-2 text-xs"
-                onClick={() => onAction({ kind: "contribute", contribution })}
+                onClick={() => send({ kind: "contribute", contribution })}
               >
                 确认出力 {contribution} 点
               </button>
@@ -384,7 +412,7 @@ export default function ActionPanel({ game, player, onAction, onShowGoal }: Acti
                 type="button"
                 className="btn-ghost mt-3 w-full !py-2 text-xs"
                 disabled={!targetId}
-                onClick={() => onAction({ kind: "blame", targetId })}
+                onClick={() => send({ kind: "blame", targetId })}
               >
                 确认甩锅
               </button>

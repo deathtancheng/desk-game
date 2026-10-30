@@ -25,6 +25,13 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
     return NextResponse.json({ error: "这个角色不在本局" }, { status: 400 });
   }
 
+  const claimedBySameClient = room.players.find(
+    (player) => player.clientId === clientId && player.memberId !== memberId,
+  );
+  if (claimedBySameClient) {
+    return NextResponse.json({ error: "你已经认领了另一个身份" }, { status: 409 });
+  }
+
   const existing = room.players.find((player) => player.memberId === memberId);
   if (existing && existing.clientId !== clientId) {
     return NextResponse.json({ error: "这个位置已经有人了" }, { status: 409 });

@@ -1,5 +1,13 @@
 export type RuleType = "negotiation" | "bidding" | "escape";
 
+export type SkillKey =
+  | "extra_gp"
+  | "force_proposal"
+  | "immune_ooc"
+  | "save_group"
+  | "slack_bonus"
+  | "radio";
+
 export type Screen = "import" | "compiling" | "lobby" | "board" | "settlement";
 
 export type ActionKind =
@@ -32,6 +40,11 @@ export interface Member {
   meme: string;
   messageCount: number;
   activeHour: string;
+  skill: {
+    key: SkillKey;
+    name: string;
+    desc: string;
+  };
 }
 
 export interface ChatSignal {
@@ -99,6 +112,7 @@ export interface ActionChoice {
   amount?: number;
   bid?: number;
   contribution?: number;
+  useSkill?: boolean;
 }
 
 export interface PlayerState {
@@ -111,6 +125,10 @@ export interface PlayerState {
   goalTargetId?: string;
   goalLotId?: string;
   goalDone: boolean;
+  skillKey: SkillKey;
+  skillName: string;
+  skillDesc: string;
+  skillUsed: boolean;
   personaHits: number;
   ooc: number;
   scapegoat: number;

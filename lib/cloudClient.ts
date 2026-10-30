@@ -94,3 +94,12 @@ export async function ackCloudAction(
   });
   if (!response.ok) throw new Error(await readError(response));
 }
+
+export async function closeCloudRoom(code: string, hostId: string): Promise<void> {
+  const response = await fetch(`${cloudApiBase()}/rooms/${encodeURIComponent(code)}/close`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hostId }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+}

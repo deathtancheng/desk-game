@@ -5,7 +5,7 @@ import { DEMO_CHAT, DEMO_GROUP_NAME, DEMO_MEMBERS } from "@/lib/demoData";
 import { deriveSignals, parseChat } from "@/lib/parser";
 import { buildConfig, selectRule } from "@/lib/compiler";
 import { createGame, nextRound as advanceRound, playHumanAction } from "@/lib/gameEngine";
-import { createCloudRoom as createCloudRoomApi, getCloudClientId } from "@/lib/cloudClient";
+import { createCloudRoom as createCloudRoomApi, getCloudClientId, closeCloudRoom as closeCloudRoomApi } from "@/lib/cloudClient";
 import type { ActionChoice, GameConfig, GameState, Screen } from "@/lib/types";
 
 interface GameStore {
@@ -38,6 +38,7 @@ interface GameStore {
   goSettlement: () => void;
   setCloudMode: (enabled: boolean) => void;
   createCloudRoom: () => Promise<void>;
+  closeCloudRoom: () => Promise<void>;
   reset: () => void;
 }
 
@@ -199,6 +200,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
   },
 
+  closeCloudRoom: async () => {
+    const state = get();
+    if (state.roomCode && state.cloudClientId) {
+      try {
+        await closeCloudRoomApi(state.roomCode, state.cloudClientId);
+      } catch {
+        // 房间可能已经过期；本地照常收尾
+      }
+    }
+    get().reset();
+  },
+
   reset: () =>
     set({
       screen: "import",
@@ -215,6 +228,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       cloudMode: false,
       cloudRole: null,
       roomCode: null,
+      cloudClientId: null,
       cloudHostMemberId: null,
       cloudError: null,
     }),

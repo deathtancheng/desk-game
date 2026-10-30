@@ -63,6 +63,16 @@ export default function MemberCard({ member, isHuman, onToggle, player, highligh
       </div>
 
       {!compact && (
+        <div className="mt-2 rounded-lg border border-neon/15 bg-neon/[0.04] px-2 py-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[8px] tracking-[0.12em] text-muted">人设技能</span>
+            <span className="text-[10px] font-semibold text-neon/90">{member.skill.name}</span>
+          </div>
+          <div className="mt-0.5 text-[9px] leading-4 text-muted">{member.skill.desc}</div>
+        </div>
+      )}
+
+      {!compact && (
         <div className="mt-3 grid grid-cols-4 gap-1.5">
           {STAT_LABELS.map((stat) => (
             <div key={stat.key} className="rounded-lg border border-line/50 bg-ink/30 px-1.5 py-1.5 text-center">

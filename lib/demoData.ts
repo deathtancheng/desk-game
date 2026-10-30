@@ -14,6 +14,7 @@ export const DEMO_MEMBERS: Member[] = [
     meme: "上次也是你",
     messageCount: 1284,
     activeHour: "23:47",
+    skill: { key: "extra_gp", name: "这单我熟", desc: "本回合额外 +2 群地位（每局一次）" },
   },
   {
     id: "m2",
@@ -26,6 +27,7 @@ export const DEMO_MEMBERS: Member[] = [
     meme: "有没有人一起",
     messageCount: 2107,
     activeHour: "21:03",
+    skill: { key: "force_proposal", name: "拉个群", desc: "本回合的提案直接通过（谈判局限定，每局一次）" },
   },
   {
     id: "m3",
@@ -38,6 +40,7 @@ export const DEMO_MEMBERS: Member[] = [
     meme: "这波不亏",
     messageCount: 1666,
     activeHour: "01:12",
+    skill: { key: "immune_ooc", name: "这波不亏", desc: "本回合免疫出戏扣分（每局一次）" },
   },
   {
     id: "m4",
@@ -50,6 +53,7 @@ export const DEMO_MEMBERS: Member[] = [
     meme: "又是我？",
     messageCount: 932,
     activeHour: "19:28",
+    skill: { key: "save_group", name: "老好人", desc: "本回合全群失败惩罚免除（谈判/逃脱限定，每局一次）" },
   },
   {
     id: "m5",
@@ -62,6 +66,7 @@ export const DEMO_MEMBERS: Member[] = [
     meme: "等我五分钟",
     messageCount: 704,
     activeHour: "02:06",
+    skill: { key: "slack_bonus", name: "真·装死", desc: "装死/弃权/0 出力仍拿 1 点（每局一次）" },
   },
   {
     id: "m6",
@@ -74,6 +79,7 @@ export const DEMO_MEMBERS: Member[] = [
     meme: "有人陪我下楼吗",
     messageCount: 1455,
     activeHour: "00:41",
+    skill: { key: "radio", name: "深夜电台", desc: "全场每人 +1，自己 +2（每局一次）" },
   },
 ];
 

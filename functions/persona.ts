@@ -5,7 +5,7 @@ interface PersonaVerdict {
   line: string;
 }
 
-const MAX_BODY = 32 * 1024;
+const MAX_BODY = 64 * 1024;
 
 const SYSTEM_PROMPT = `你是桌游《群戏》的群主人设裁判。
 你的任务：根据每个玩家的群聊标签，判断他这一回合的行动像不像这个人。
@@ -19,6 +19,7 @@ const SYSTEM_PROMPT = `你是桌游《群戏》的群主人设裁判。
 5. line 用中文，20 字以内，损友语气，但不人身攻击、不评价真实人格、不涉及隐私。
 6. 只能引用输入里出现的标签；不要编造新标签。
 7. delta = 0 时 line 可以是空字符串。
+8. 如果玩家在群聊里说了话，也要参考他说话的口吻是否像标签。
 
 输出格式：
 {"verdicts":[{"id":"m1","delta":1,"tag":"外卖部长","line":"阿伟 的「自荐」很像「外卖部长」，人设 +1"}]}`;
@@ -67,7 +68,7 @@ export async function handlePersona(
     fail("invalid_input", 400);
   }
 
-  if (!body || !Array.isArray(body.players) || body.players.length < 1 || body.players.length > 6) {
+  if (!body || !Array.isArray(body.players) || body.players.length < 1 || body.players.length > 10) {
     fail("invalid_input", 400);
   }
 

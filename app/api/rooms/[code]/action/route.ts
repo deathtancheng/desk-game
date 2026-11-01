@@ -11,12 +11,33 @@ const ACTION_KINDS = new Set([
   "meme",
   "pass",
   "volunteer",
+  "underbid",
+  "back",
   "bid",
   "abstain",
   "coalition",
   "contribute",
   "blame",
 ]);
+
+function validAction(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const action = value as Record<string, unknown>;
+  if (typeof action.kind !== "string" || !ACTION_KINDS.has(action.kind)) return false;
+  if (
+    action.targetId !== undefined &&
+    (typeof action.targetId !== "string" || !action.targetId || action.targetId.length > 24)
+  ) {
+    return false;
+  }
+  if (action.memeText !== undefined && (typeof action.memeText !== "string" || action.memeText.length > 40)) {
+    return false;
+  }
+  if (action.useSkill !== undefined && typeof action.useSkill !== "boolean") return false;
+  const bounded = (input: unknown, max: number) =>
+    input === undefined || (typeof input === "number" && Number.isInteger(input) && input >= 0 && input <= max);
+  return bounded(action.amount, 2) && bounded(action.bid, 3) && bounded(action.contribution, 2);
+}
 
 export async function POST(request: Request, context: { params: Promise<{ code: string }> }) {
   const { code } = await context.params;
@@ -39,11 +60,8 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
   if (typeof clientId !== "string" || typeof memberId !== "string") {
     return NextResponse.json({ error: "missing clientId or memberId" }, { status: 400 });
   }
-  if (!action || typeof action !== "object" || typeof (action as { kind?: unknown }).kind !== "string") {
+  if (!validAction(action)) {
     return NextResponse.json({ error: "invalid action" }, { status: 400 });
-  }
-  if (!ACTION_KINDS.has((action as { kind: string }).kind)) {
-    return NextResponse.json({ error: "unknown action kind" }, { status: 400 });
   }
 
   const claim = room.players.find((player) => player.memberId === memberId);
@@ -68,6 +86,7 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
     memberId,
     clientId,
     action: action as ActionChoice,
+    round: typeof room.state.round === "number" ? room.state.round : undefined,
     createdAt: Date.now(),
   });
   room.updatedAt = Date.now();

@@ -11,6 +11,9 @@ import YearbookPoster from "./YearbookPoster";
 export default function SettlementScreen() {
   const game = useGameStore((state) => state.game);
   const reset = useGameStore((state) => state.reset);
+  const roomCode = useGameStore((state) => state.roomCode);
+  const cloudRole = useGameStore((state) => state.cloudRole);
+  const closeCloudRoom = useGameStore((state) => state.closeCloudRoom);
   const posterRef = useRef<HTMLDivElement>(null);
   const [date, setDate] = useState("");
   const [downloading, setDownloading] = useState(false);
@@ -24,6 +27,16 @@ export default function SettlementScreen() {
 
   if (!game || !yearbook) return null;
 
+  const leaveGame = () => {
+    if (roomCode && cloudRole === "host") {
+      if (window.confirm("结束当前云端房间并回到首页？室友会断开。")) {
+        void closeCloudRoom();
+      }
+      return;
+    }
+    reset();
+  };
+
   const ranked = rankPlayers(game);
   const titleById = new Map(yearbook.entries.map((entry) => [entry.player.memberId, entry.title]));
 
@@ -33,9 +46,13 @@ export default function SettlementScreen() {
     setError("");
     try {
       const dataUrl = await toPng(posterRef.current, {
-        pixelRatio: 2,
+        pixelRatio: 3,
         cacheBust: true,
-        backgroundColor: "#070a0e",
+        skipFonts: true,
+        backgroundColor: "#f1e6d4",
+        width: 720,
+        height: posterRef.current.scrollHeight,
+        style: { margin: "0" },
       });
       const link = document.createElement("a");
       link.download = `群戏-${game.config.groupName}-群年鉴.png`;
@@ -65,7 +82,7 @@ export default function SettlementScreen() {
           <button className="btn-primary" onClick={download} disabled={downloading}>
             {downloading ? "正在生成海报…" : "保存群年鉴"}
           </button>
-          <button className="btn-ghost" onClick={reset}>
+          <button className="btn-ghost" onClick={leaveGame}>
             再来一局
           </button>
         </div>
@@ -93,7 +110,11 @@ export default function SettlementScreen() {
             >
               <div className="flex items-center justify-between">
                 <span className="text-[10px] tracking-[0.2em] text-white/35">第 {index + 1} 名</span>
-                {index === 0 && <span className="rounded-full bg-neon/15 px-2 py-0.5 text-[8px] text-neon">本局群主</span>}
+                {index === 0 ? (
+                  <span className="rounded-full bg-neon/15 px-2 py-0.5 text-[8px] text-neon">本局冠军</span>
+                ) : player.eliminated ? (
+                  <span className="rounded-full bg-ember/15 px-2 py-0.5 text-[8px] text-ember">出局</span>
+                ) : null}
               </div>
               <div className="mt-3 flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-2xl">
@@ -128,8 +149,10 @@ export default function SettlementScreen() {
       </div>
 
       <div className="chat-scroll mt-3 overflow-x-auto pb-3">
-        <div ref={posterRef} className="mx-auto w-[720px]">
-          <YearbookPoster yearbook={yearbook} game={game} date={date} />
+        <div className="mx-auto w-[720px]">
+          <div ref={posterRef}>
+            <YearbookPoster yearbook={yearbook} game={game} date={date} />
+          </div>
         </div>
       </div>
 
@@ -137,7 +160,7 @@ export default function SettlementScreen() {
         <div className="text-[10px] leading-5 text-muted">
           这一局只属于你们 {game.players.length} 个人。群戏默认不上传原文、不用真头像，游戏结束即删除。
         </div>
-        <button className="btn-ghost !px-3 !py-2 text-xs" onClick={reset}>
+        <button className="btn-ghost !px-3 !py-2 text-xs" onClick={leaveGame}>
           回到首页
         </button>
       </div>

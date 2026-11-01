@@ -20,8 +20,13 @@ export async function POST(request: Request) {
   if (typeof hostId !== "string" || !hostId) {
     return NextResponse.json({ error: "missing hostId" }, { status: 400 });
   }
-  if (!Array.isArray(humanIds) || humanIds.length < 2 || humanIds.length > 6) {
-    return NextResponse.json({ error: "需要 2–6 个真人位置" }, { status: 400 });
+  if (
+    !Array.isArray(humanIds) ||
+    humanIds.length < 1 ||
+    humanIds.length > 10 ||
+    new Set(humanIds).size !== humanIds.length
+  ) {
+    return NextResponse.json({ error: "需要 1–10 个不同的真人位置" }, { status: 400 });
   }
 
   const validIds = new Set(DEMO_MEMBERS.map((member) => member.id));

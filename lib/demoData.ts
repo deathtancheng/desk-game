@@ -14,7 +14,7 @@ export const DEMO_MEMBERS: Member[] = [
     meme: "上次也是你",
     messageCount: 1284,
     activeHour: "23:47",
-    skill: { key: "extra_gp", name: "这单我熟", desc: "本回合额外 +2 群地位（每局一次）" },
+    skill: { key: "extra_gp", name: "这单我熟", desc: "本事件额外 +2 群地位（每局一次）" },
   },
   {
     id: "m2",
@@ -27,7 +27,7 @@ export const DEMO_MEMBERS: Member[] = [
     meme: "有没有人一起",
     messageCount: 2107,
     activeHour: "21:03",
-    skill: { key: "force_proposal", name: "拉个群", desc: "本回合的提案直接通过（谈判局限定，每局一次）" },
+    skill: { key: "force_proposal", name: "拉个群", desc: "本事件的提案直接通过（谈判局限定，每局一次）" },
   },
   {
     id: "m3",
@@ -40,7 +40,7 @@ export const DEMO_MEMBERS: Member[] = [
     meme: "这波不亏",
     messageCount: 1666,
     activeHour: "01:12",
-    skill: { key: "immune_ooc", name: "这波不亏", desc: "本回合免疫出戏扣分（每局一次）" },
+    skill: { key: "immune_ooc", name: "这波不亏", desc: "本事件免疫出戏扣分（每局一次）" },
   },
   {
     id: "m4",
@@ -53,7 +53,7 @@ export const DEMO_MEMBERS: Member[] = [
     meme: "又是我？",
     messageCount: 932,
     activeHour: "19:28",
-    skill: { key: "save_group", name: "老好人", desc: "本回合全群失败惩罚免除（谈判/逃脱限定，每局一次）" },
+    skill: { key: "save_group", name: "老好人", desc: "本事件全群失败惩罚免除（谈判/逃脱限定，每局一次）" },
   },
   {
     id: "m5",
@@ -80,6 +80,58 @@ export const DEMO_MEMBERS: Member[] = [
     messageCount: 1455,
     activeHour: "00:41",
     skill: { key: "radio", name: "深夜电台", desc: "全场每人 +1，自己 +2（每局一次）" },
+  },
+  {
+    id: "m7",
+    name: "老赵",
+    emoji: "🐻",
+    tags: ["寝室长", "查寝预警机", "养生"],
+    stats: { influence: 5, reliability: 4, mystery: 1, scapegoat: 0 },
+    desire: "立威",
+    quote: "都听我的",
+    meme: "我说了算",
+    messageCount: 1820,
+    activeHour: "22:10",
+    skill: { key: "shield", name: "我有人罩", desc: "被淘汰时免疫一次，改由第二低的人出局（每局一次）" },
+  },
+  {
+    id: "m8",
+    name: "小美",
+    emoji: "🦄",
+    tags: ["宿舍广播", "八卦中心", "气氛组"],
+    stats: { influence: 4, reliability: 2, mystery: 3, scapegoat: 1 },
+    desire: "脱单",
+    quote: "真的假的",
+    meme: "细说",
+    messageCount: 2403,
+    activeHour: "23:15",
+    skill: { key: "steal", name: "顺手牵羊", desc: "从群地位最高的人手里拿 1 点（每局一次）" },
+  },
+  {
+    id: "m9",
+    name: "大壮",
+    emoji: "🐗",
+    tags: ["健身狂魔", "早起冠军", "直男"],
+    stats: { influence: 3, reliability: 3, mystery: 1, scapegoat: 2 },
+    desire: "被夸",
+    quote: "就这？",
+    meme: "练就完了",
+    messageCount: 811,
+    activeHour: "06:40",
+    skill: { key: "rally", name: "摇人", desc: "本事件全队出力 +2（每局一次）" },
+  },
+  {
+    id: "m10",
+    name: "阿凯",
+    emoji: "🐧",
+    tags: ["夜班保安", "神秘人", "游戏代练"],
+    stats: { influence: 2, reliability: 2, mystery: 5, scapegoat: 1 },
+    desire: "摸鱼",
+    quote: "别问",
+    meme: "懂的都懂",
+    messageCount: 599,
+    activeHour: "03:33",
+    skill: { key: "discount", name: "内部价", desc: "本事件拍下拍品少付 1 点（每局一次）" },
   },
 ];
 
@@ -120,4 +172,12 @@ export const DEMO_CHAT = `[2026-09-18 20:58] 小陈: 外卖到了，谁去拿？
 [23:51] 小李: 行吧
 [00:41] 小雨: 算了，睡了
 [01:12] 老王: 笑死，明天考试
-[02:06] 阿杰: 等我五分钟`;
+[02:06] 阿杰: 等我五分钟
+[22:12] 老赵: 都听我的，明天 7 点查寝
+[22:13] 小美: 细说细说
+[22:14] 大壮: 就这？我 6 点就起了
+[22:15] 阿凯: 别问，懂的都懂
+[22:16] 小美: 真的假的，寝室长又立威
+[22:17] 老赵: 我说了算
+[22:18] 大壮: 练就完了
+[22:19] 阿凯: 夜班刚回，先装死`;

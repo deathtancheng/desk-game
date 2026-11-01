@@ -24,6 +24,7 @@ const SYSTEM_PROMPT = `你是桌游《群戏》的群主人设裁判。
 5. line 用中文，20 字以内，损友语气，但不人身攻击、不评价真实人格、不涉及隐私。
 6. 只能引用输入里出现的标签；不要编造新标签。
 7. delta = 0 时 line 可以是空字符串。
+8. 如果玩家在群聊里说了话，也要参考他说话的口吻是否像标签。
 
 输出格式：
 {"verdicts":[{"id":"m1","delta":1,"tag":"外卖部长","line":"阿伟 的「自荐」很像「外卖部长」，人设 +1"}]}`;
@@ -33,7 +34,7 @@ function isJudgeRequest(value: unknown): value is PersonaJudgeRequest {
   const data = value as Record<string, unknown>;
   if (typeof data.ruleType !== "string" || !RULE_TYPES.has(data.ruleType)) return false;
   if (typeof data.round !== "number" || typeof data.event !== "string") return false;
-  if (!Array.isArray(data.players) || data.players.length < 1 || data.players.length > 6) return false;
+  if (!Array.isArray(data.players) || data.players.length < 1 || data.players.length > 10) return false;
 
   return data.players.every((entry) => {
     if (!entry || typeof entry !== "object") return false;

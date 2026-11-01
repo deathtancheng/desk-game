@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { DEMO_CHAT, DEMO_GROUP_NAME, DEMO_MEMBERS } from "@/lib/demoData";
 import { parseChat } from "@/lib/parser";
@@ -9,15 +9,15 @@ import { useGameStore } from "@/store/gameStore";
 const FEATURES = [
   {
     title: "聊天 → 角色",
-    detail: "发言量、被 @、外卖、深夜 emo，变成 6 张角色卡。",
+    detail: "发言量、被 @、外卖、深夜 emo，变成 10 张角色卡。",
   },
   {
     title: "角色 → 规则",
-    detail: "从谈判 / 竞标 / 逃脱三套骨架里，选一套最适合你们群的。",
+    detail: "把谈判 / 竞标 / 逃脱混成 8–9 个随机事件，每个事件带变数和悬赏。",
   },
   {
     title: "一局 → 群年鉴",
-    detail: "3 分钟玩完，每个人带走一个只有你们懂的称号。",
+    detail: "淘汰到最后，每个人带走一个只有你们懂的称号。",
   },
 ];
 
@@ -28,13 +28,54 @@ export default function ImportScreen() {
   const setRawChat = useGameStore((state) => state.setRawChat);
   const useDemo = useGameStore((state) => state.useDemo);
   const compile = useGameStore((state) => state.compile);
+  const quickCreateRoom = useGameStore((state) => state.quickCreateRoom);
   const [importError, setImportError] = useState("");
   const [importedFrom, setImportedFrom] = useState("");
   const [helpOpen, setHelpOpen] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinError, setJoinError] = useState("");
+  const [hostOpen, setHostOpen] = useState(false);
+  const [hostCount, setHostCount] = useState(3);
+  const [hostChoiceId, setHostChoiceId] = useState(DEMO_MEMBERS[0].id);
+  const [hostCreating, setHostCreating] = useState(false);
+  const [hostError, setHostError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const parsed = useMemo(() => parseChat(rawChat), [rawChat]);
   const parsedNames = useMemo(() => [...new Set(parsed.map((line) => line.name))], [parsed]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("host") === "1") setHostOpen(true);
+    const openHost = () => {
+      setHostError("");
+      setHostOpen(true);
+    };
+    window.addEventListener("qunxi-open-host", openHost);
+    return () => window.removeEventListener("qunxi-open-host", openHost);
+  }, []);
+
+  const createHostRoom = async () => {
+    setHostCreating(true);
+    setHostError("");
+    try {
+      await quickCreateRoom(hostCount, hostChoiceId);
+    } catch (error) {
+      setHostError(error instanceof Error ? error.message : "创建房间失败，请稍后再试。");
+    } finally {
+      setHostCreating(false);
+    }
+  };
+
+  const closeHost = () => {
+    setHostOpen(false);
+    setHostError("");
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("host") === "1") {
+      url.searchParams.delete("host");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+    }
+  };
 
   const fillDemo = () => {
     useDemo();
@@ -77,6 +118,15 @@ export default function ImportScreen() {
     }
   };
 
+  const openJoin = () => {
+    const code = joinCode.trim().toUpperCase();
+    if (code.length !== 5) {
+      setJoinError("邀请码是 5 位，问一下房主。");
+      return;
+    }
+    window.location.assign(`/?join=${encodeURIComponent(code)}`);
+  };
+
   return (
     <div className="mx-auto w-full max-w-7xl px-5 pb-16 sm:px-8">
       <section className="grid items-start gap-8 pt-6 lg:grid-cols-[1.15fr_0.85fr] lg:pt-10">
@@ -109,8 +159,8 @@ export default function ImportScreen() {
             transition={{ delay: 0.16 }}
             className="mt-5 max-w-xl text-sm leading-7 text-white/60 sm:text-base"
           >
-            6 人宿舍，2–6 人可玩。从聊天里提取角色、梗和矛盾，选一套规则骨架，生成 1 页规则 + 卡牌 + 结算。
-            3 分钟玩完，带走一张群年鉴。
+            10 人群，1–10 个真人可玩。从聊天里提取角色、梗和矛盾，生成 8–9 个随机事件（每个带变数和悬赏）+ 1 页规则 + 卡牌 + 淘汰结算。
+            淘汰到最后，带走一张群年鉴。
           </motion.p>
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
@@ -148,11 +198,11 @@ export default function ImportScreen() {
             </div>
             <span className="pill">
               <span className="h-1.5 w-1.5 rounded-full bg-mint" />
-              6 人 · 40 条消息
+              10 人 · 40 条消息
             </span>
           </div>
 
-          <div className="mt-5 flex items-end justify-between gap-2">
+          <div className="mt-5 grid grid-cols-5 gap-x-1 gap-y-3">
             {DEMO_MEMBERS.map((member, index) => (
               <div
                 key={member.id}
@@ -195,9 +245,9 @@ export default function ImportScreen() {
 
           <div className="mt-4 grid grid-cols-3 gap-2">
             {[
-              ["6", "角色"],
+              ["10", "角色"],
               ["3", "规则骨架"],
-              ["3:00", "一局"],
+              ["淘汰", "一局"],
             ].map(([value, label]) => (
               <div key={label} className="rounded-xl border border-line/60 bg-panel2/50 px-3 py-2.5 text-center">
                 <div className="font-mono text-sm font-bold text-white">{value}</div>
@@ -207,6 +257,66 @@ export default function ImportScreen() {
           </div>
         </motion.div>
       </section>
+
+      <motion.section
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="mt-6 rounded-2xl border border-mint/25 bg-mint/[0.04] p-4 sm:p-5"
+      >
+        <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div>
+            <div className="text-[10px] tracking-[0.2em] text-mint">已有房间？直接联机</div>
+            <div className="mt-1 font-serif text-lg font-bold text-white">输入室友发来的 5 位邀请码</div>
+            <p className="mt-1 text-[10px] leading-5 text-muted">
+              不用重新导入聊天。房主电脑负责结算，你可以在手机上随时聊天、发表情包和图片。
+            </p>
+          </div>
+          <form
+            className="flex gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              openJoin();
+            }}
+          >
+            <input
+              value={joinCode}
+              onChange={(event) => {
+                setJoinCode(event.target.value.toUpperCase());
+                setJoinError("");
+              }}
+              maxLength={5}
+              placeholder="例如 A7K2M"
+              className="w-36 rounded-xl border border-mint/25 bg-ink/40 px-3 py-2.5 font-mono text-sm tracking-[0.2em] text-white outline-none placeholder:font-sans placeholder:tracking-normal placeholder:text-white/20 focus:border-mint/60"
+            />
+            <button type="submit" className="btn-primary !px-4 !py-2.5 text-xs">
+              加入
+            </button>
+          </form>
+        </div>
+        <div className="mt-3 flex flex-col gap-2 border-t border-mint/10 pt-3 text-[9px] leading-4 text-muted sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div>想当房主？可以直接开一个房间，不用先编译；想用自己群的聊天，再往下导入。</div>
+            <div className="mt-0.5">开房后选择真人席位，创建成功会进入角色页并拿到 5 位邀请码。</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn-primary !px-3 !py-2 text-[10px]"
+              onClick={() => {
+                setHostError("");
+                setHostOpen(true);
+              }}
+            >
+              开一个房间
+            </button>
+            <a className="text-mint/90 underline-offset-2 hover:underline" href="/?join=1">
+              打开联机大厅
+            </a>
+          </div>
+        </div>
+        {joinError && <div className="mt-2 text-[10px] text-ember">{joinError}</div>}
+      </motion.section>
 
       <motion.section
         initial={{ opacity: 0, y: 18 }}
@@ -317,8 +427,8 @@ export default function ImportScreen() {
             <div className="mt-4 space-y-3">
               {[
                 ["1 页群公告", "规则、行动、结算，全部压在一屏内。"],
-                ["6 张角色卡", "每个人的标签、属性、隐藏诉求和梗料。"],
-                ["1 套规则骨架", "谈判 / 竞标 / 合作逃脱，LLM 只填内容。"],
+                ["10 张角色卡", "每个人的标签、属性、隐藏诉求和梗料。"],
+                ["8–9 个随机事件", "谈判 / 竞标 / 逃脱混排，每事件带变数 + 悬赏，最低分出局。"],
                 ["1 张群年鉴", "称号、名场面、群聊人格雷达图。"],
               ].map(([title, detail]) => (
                 <div key={title} className="flex gap-3">
@@ -342,6 +452,112 @@ export default function ImportScreen() {
           </div>
         </div>
       </motion.section>
+
+      <AnimatePresence>
+        {hostOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 p-5 backdrop-blur"
+            onClick={closeHost}
+          >
+            <motion.div
+              initial={{ scale: 0.94, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.96, y: 6 }}
+              className="w-full max-w-md rounded-2xl border border-mint/30 bg-panel p-5 shadow-paper"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-[9px] tracking-[0.18em] text-mint">房主 · 一键开房</div>
+                  <div className="mt-1 font-serif text-xl font-bold text-white">开一个云端房间</div>
+                </div>
+                <button type="button" className="text-[10px] text-muted" onClick={closeHost}>
+                  关闭
+                </button>
+              </div>
+
+              <p className="mt-2 text-[10px] leading-5 text-muted">
+                房主这台设备当牌桌。创建后会直接进入角色页，拿到 5 位邀请码发给室友；室友从首页“联机加入”进来。
+              </p>
+              <p className="mt-1 text-[9px] leading-4 text-ember/70">
+                没加入的真人位置仍算真人，开局后可在牌桌用“托管”代出牌；其余角色由策略 AI 操作。
+              </p>
+
+              <div className="mt-4">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="font-semibold text-white/75">我扮演</span>
+                  <span className="text-muted">房主角色不再固定为阿伟</span>
+                </div>
+                <select
+                  value={hostChoiceId}
+                  onChange={(event) => setHostChoiceId(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-line/60 bg-ink/30 px-3 py-2.5 text-xs text-white/80 outline-none transition focus:border-mint/50"
+                >
+                  {DEMO_MEMBERS.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.emoji} {member.name} · {member.tags[0]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="font-semibold text-white/75">真人席位</span>
+                  <span className="text-muted">其余角色由策略 AI 补齐</span>
+                </div>
+                <div className="mt-2 grid grid-cols-5 gap-1.5">
+                  {Array.from({ length: 10 }, (_, index) => index + 1).map((count) => (
+                    <button
+                      key={count}
+                      type="button"
+                      onClick={() => setHostCount(count)}
+                      className={`rounded-xl border px-1 py-2 text-center transition ${
+                        hostCount === count
+                          ? "border-mint/60 bg-mint/10 text-mint"
+                          : "border-line/60 bg-ink/30 text-white/55 hover:border-mint/40"
+                      }`}
+                    >
+                      <div className="font-mono text-base font-bold">{count}</div>
+                      <div className="mt-0.5 text-[8px]">{count === 1 ? "+ 9 AI" : count === 10 ? "全员" : "真人"}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-xl border border-line/60 bg-ink/30 px-3 py-2 text-[9px] leading-4 text-muted">
+                本局使用：
+                <span className="ml-1 text-white/70">
+                  {parsed.length >= 8 ? `当前聊天记录（${parsed.length} 条 / ${parsedNames.length} 人）` : `示例群「${DEMO_GROUP_NAME}」`}
+                </span>
+                <br />
+                想用自己的群聊？关闭这里，在下方导入聊天后点“开始编译”，再在角色页创建房间也可以。
+                <br />
+                想指定具体哪几个室友是真人？关闭后先进入角色页自由勾选，再创建云端房间。
+              </div>
+
+              {hostError && <div className="mt-2 text-[10px] leading-4 text-ember">{hostError}</div>}
+
+              <div className="mt-4 flex gap-2">
+                <button type="button" className="btn-ghost flex-1 !py-2.5 text-xs" onClick={closeHost}>
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary flex-1 !py-2.5 text-xs"
+                  disabled={hostCreating}
+                  onClick={() => void createHostRoom()}
+                >
+                  {hostCreating ? "正在创建…" : `创建房间 · ${hostCount} 真人`}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {helpOpen && (

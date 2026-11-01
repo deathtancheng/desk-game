@@ -69,6 +69,20 @@ export async function submitCloudAction(
   if (!response.ok) throw new Error(await readError(response));
 }
 
+export async function sendCloudChat(
+  code: string,
+  clientId: string,
+  memberId: string,
+  message: { id: string; text: string; emoji?: string; image?: string; big?: boolean },
+): Promise<void> {
+  const response = await fetch(`${cloudApiBase()}/rooms/${encodeURIComponent(code)}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clientId, memberId, ...message }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+}
+
 export async function publishCloudState(
   code: string,
   hostId: string,
@@ -102,4 +116,19 @@ export async function closeCloudRoom(code: string, hostId: string): Promise<void
     body: JSON.stringify({ hostId }),
   });
   if (!response.ok) throw new Error(await readError(response));
+}
+
+export async function updateCloudSeats(
+  code: string,
+  hostId: string,
+  humanIds: string[],
+  hostMemberId?: string,
+): Promise<RoomView> {
+  const response = await fetch(`${cloudApiBase()}/rooms/${encodeURIComponent(code)}/seats`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hostId, humanIds, hostMemberId }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return (await response.json()) as RoomView;
 }

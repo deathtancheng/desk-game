@@ -24,11 +24,14 @@ export default function JoinScreen() {
     setClientId(getCloudClientId());
 
     const params = new URLSearchParams(window.location.search);
-    const initial = (params.get("join") || params.get("code") || "").toUpperCase();
+    const raw = params.get("join") || params.get("code") || "";
+    const lobbyOnly = raw === "1";
+    const initial = lobbyOnly ? "" : raw.toUpperCase();
     if (initial) {
       setCode(initial);
       void lookup(initial);
     }
+    if (lobbyOnly) return;
 
     const saved = window.sessionStorage.getItem("qunxi-guest-session");
     if (!saved) return;
@@ -41,7 +44,13 @@ export default function JoinScreen() {
       }
       void fetchCloudRoom(session.roomCode)
         .then((existing) => {
-          if (existing) setJoined(session);
+          const stillSeated =
+            existing &&
+            existing.humanIds.includes(session.memberId) &&
+            existing.players.some(
+              (player) => player.memberId === session.memberId && player.clientId === session.clientId,
+            );
+          if (stillSeated) setJoined(session);
           else window.sessionStorage.removeItem("qunxi-guest-session");
         })
         .catch(() => window.sessionStorage.removeItem("qunxi-guest-session"));
@@ -53,7 +62,7 @@ export default function JoinScreen() {
   const lookup = async (value: string) => {
     const normalized = value.trim().toUpperCase();
     if (!normalized) {
-      setError("先输入房间号。");
+      setError("先输入 5 位邀请码。");
       return;
     }
     setLoading(true);
@@ -113,15 +122,20 @@ export default function JoinScreen() {
             <div className="text-[10px] tracking-[0.18em] text-muted">手机加入</div>
           </div>
         </div>
-        <a className="btn-ghost !px-3 !py-2 text-[10px]" href="/">
-          回到首页
-        </a>
+        <div className="flex items-center gap-2">
+          <a className="btn-ghost !px-3 !py-2 text-[10px]" href="/?host=1">
+            开房间
+          </a>
+          <a className="btn-ghost !px-3 !py-2 text-[10px]" href="/">
+            回到首页
+          </a>
+        </div>
       </header>
 
       <div className="mx-auto w-full max-w-3xl px-5 pb-16 pt-8 sm:px-8">
         <div className="font-serif text-3xl font-bold tracking-tight sm:text-4xl">加入群戏房间</div>
         <p className="mt-2 text-sm leading-6 text-white/55">
-          输入房主给的房间号，选一个还没被认领的群友。房主电脑负责结算，你只需要在轮到你时出牌。
+          输入房主给的 5 位邀请码，选一个还没被认领的群友。房主电脑负责结算；你随时可以在群里聊天，轮到你时出牌。
         </p>
 
         <div className="panel mt-6 p-5">
@@ -137,10 +151,23 @@ export default function JoinScreen() {
               className="flex-1 rounded-xl border border-line bg-ink/40 px-4 py-3 font-mono text-lg tracking-[0.2em] text-white outline-none transition placeholder:tracking-normal placeholder:text-white/20 focus:border-neon/50"
             />
             <button className="btn-primary sm:w-32" onClick={() => void lookup(code)} disabled={loading}>
-              {loading ? "查找中…" : "查找房间"}
+              {loading ? "查找中…" : "用邀请码加入"}
             </button>
           </div>
           {error && <div className="mt-2 text-[11px] text-ember">{error}</div>}
+        </div>
+
+        <div className="panel mt-4 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-[9px] tracking-[0.16em] text-mint">我是房主</div>
+            <div className="mt-1 text-sm font-bold text-white">没有房间？直接开一个</div>
+            <p className="mt-1 text-[10px] leading-5 text-muted">
+              选真人席位，创建后会进入角色页并生成 5 位邀请码，再把码发给室友。
+            </p>
+          </div>
+          <a className="btn-primary shrink-0 !py-2.5 text-xs" href="/?host=1">
+            创建房间
+          </a>
         </div>
 
         {room && (
@@ -149,7 +176,7 @@ export default function JoinScreen() {
               <div>
                 <div className="font-serif text-lg font-bold text-white">{room.groupName}</div>
                 <div className="mt-0.5 text-[10px] text-muted">
-                  房间号 <span className="font-mono text-neon">{room.code}</span>
+                  邀请码 <span className="font-mono text-neon">{room.code}</span>
                   {room.state ? ` · ${room.state.config.ruleTitle}` : " · 还没开局"}
                 </div>
               </div>
@@ -205,7 +232,7 @@ export default function JoinScreen() {
             </div>
 
             <div className="border-t border-line/60 px-5 py-3 text-[9px] leading-4 text-muted">
-              房主需要保持电脑页面开着。云端模式下隐藏诉求是信任制；牌桌状态会自动同步。
+              房主需要保持电脑页面开着。云端模式下隐藏诉求是信任制；牌桌状态和群聊会自动同步。
             </div>
           </div>
         )}

@@ -11,11 +11,11 @@ export default function CompileScreen() {
 
   const steps = useMemo(
     () => [
-      "读取群成员…… 6 人",
+      "读取群成员…… 10 人",
       `提取 ${config?.signals.totalMessages ?? 0} 条消息 / ${config?.signals.memeCount ?? 0} 个梗`,
       `检测信号：${config?.signals.topKeywords.slice(0, 4).join(" / ") || "谁去 / 外卖 / 上次"}`,
-      `选择规则骨架：${config?.ruleTitle ?? "《今晚谁去拿外卖》"}`,
-      "检查这局能不能玩……",
+      `洗牌事件牌堆：${config?.maxEvents ?? 5} 个随机事件`,
+      "检查淘汰顺序和隐藏诉求……",
       "生成群公告、角色卡和群年鉴……",
     ],
     [config],
@@ -106,7 +106,7 @@ export default function CompileScreen() {
           <div className="text-[10px] leading-5 text-muted">
             本地解析 · 只提取特征 · 不上传原文
             <br />
-            规则是写死的，内容才是现填的
+            事件是随机的，规则和淘汰是写死的
           </div>
           <div className="flex items-center gap-2 text-[10px] text-muted">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neon" />

@@ -12,12 +12,30 @@ import JoinScreen from "./JoinScreen";
 export default function QunxiApp() {
   const screen = useGameStore((state) => state.screen);
   const reset = useGameStore((state) => state.reset);
+  const roomCode = useGameStore((state) => state.roomCode);
+  const cloudRole = useGameStore((state) => state.cloudRole);
+  const closeCloudRoom = useGameStore((state) => state.closeCloudRoom);
   const [joinMode, setJoinMode] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setJoinMode(Boolean(params.get("join") || params.get("code")));
+    const path = window.location.pathname.replace(/\/+$/, "");
+    setJoinMode(Boolean(params.get("join") || params.get("code")) || path === "/join");
   }, []);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [screen]);
+
+  const handleReset = () => {
+    if (roomCode && cloudRole === "host") {
+      if (window.confirm("结束当前云端房间并重新开始？室友会断开。")) {
+        void closeCloudRoom();
+      }
+      return;
+    }
+    reset();
+  };
 
   if (joinMode) return <JoinScreen />;
 
@@ -38,8 +56,22 @@ export default function QunxiApp() {
             <span className="h-1.5 w-1.5 rounded-full bg-mint" />
             本地解析 · 不上传原文
           </span>
+          {screen === "import" && (
+            <>
+              <a className="btn-ghost !px-3 !py-2 text-xs" href="/?join=1">
+                联机加入
+              </a>
+              <button
+                type="button"
+                className="btn-primary !px-3 !py-2 text-xs"
+                onClick={() => window.dispatchEvent(new Event("qunxi-open-host"))}
+              >
+                开房间
+              </button>
+            </>
+          )}
           {screen !== "import" && (
-            <button className="btn-ghost !px-3 !py-2 text-xs" onClick={reset}>
+            <button className="btn-ghost !px-3 !py-2 text-xs" onClick={handleReset}>
               重新开始
             </button>
           )}

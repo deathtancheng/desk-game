@@ -14,11 +14,24 @@ interface RoomAction {
   memberId: string;
   clientId: string;
   action: unknown;
+  round?: number;
   createdAt: number;
+}
+
+interface RoomChat {
+  id: string;
+  kind: "chat";
+  memberId: string;
+  text: string;
+  emoji?: string;
+  image?: string;
+  big?: boolean;
+  at: number;
 }
 
 interface RoomState {
   phase?: string;
+  round?: number;
   pendingIndex?: number;
   players?: { memberId?: string }[];
   [key: string]: unknown;
@@ -33,6 +46,7 @@ interface RoomData {
   players: RoomPlayer[];
   state: RoomState | null;
   pending: RoomAction[];
+  chat: RoomChat[];
   createdAt: number;
   updatedAt: number;
 }
@@ -51,6 +65,7 @@ interface RoomView {
   players: RoomPlayer[];
   state: RoomState | null;
   pending?: RoomAction[];
+  chat?: RoomChat[];
 }
 
 interface Dependencies {
@@ -61,6 +76,41 @@ interface Dependencies {
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_BODY = 64 * 1024;
 const MAX_STATE_BODY = 1024 * 1024;
+const MAX_CHAT_BODY = 512 * 1024;
+const MAX_CHAT_IMAGE = 140_000;
+const ACTION_KINDS = new Set([
+  "propose",
+  "support",
+  "meme",
+  "pass",
+  "volunteer",
+  "underbid",
+  "back",
+  "bid",
+  "abstain",
+  "coalition",
+  "contribute",
+  "blame",
+]);
+
+function validAction(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const action = value as Record<string, unknown>;
+  if (typeof action.kind !== "string" || !ACTION_KINDS.has(action.kind)) return false;
+  if (
+    action.targetId !== undefined &&
+    (typeof action.targetId !== "string" || !action.targetId || action.targetId.length > 24)
+  ) {
+    return false;
+  }
+  if (action.memeText !== undefined && (typeof action.memeText !== "string" || action.memeText.length > 40)) {
+    return false;
+  }
+  if (action.useSkill !== undefined && typeof action.useSkill !== "boolean") return false;
+  const bounded = (input: unknown, max: number) =>
+    input === undefined || (typeof input === "number" && Number.isInteger(input) && input >= 0 && input <= max);
+  return bounded(action.amount, 2) && bounded(action.bid, 3) && bounded(action.contribution, 2);
+}
 
 export function application({ db, BackendError }: Dependencies) {
   const fail = (code: string, status: number): never => {
@@ -139,6 +189,7 @@ export function application({ db, BackendError }: Dependencies) {
       state: room.state,
     };
     if (includePending) value.pending = room.pending;
+    if (includePending) value.chat = room.chat ?? [];
     return value;
   }
 
@@ -156,8 +207,9 @@ export function application({ db, BackendError }: Dependencies) {
     }
     if (
       !Array.isArray(humanIds) ||
-      humanIds.length < 2 ||
-      humanIds.length > 6 ||
+      humanIds.length < 1 ||
+      humanIds.length > 10 ||
+      new Set(humanIds).size !== humanIds.length ||
       !humanIds.every((value: unknown) => typeof value === "string" && value.length <= 24)
     ) {
       fail("invalid_input", 400);
@@ -175,6 +227,7 @@ export function application({ db, BackendError }: Dependencies) {
         players: [{ memberId: humanIds[0], name: "房主", clientId: hostId, joinedAt: now }],
         state: null,
         pending: [],
+        chat: [],
         createdAt: now,
         updatedAt: now,
       };
@@ -230,9 +283,7 @@ export function application({ db, BackendError }: Dependencies) {
       !clientId ||
       typeof memberId !== "string" ||
       !memberId ||
-      !action ||
-      typeof action !== "object" ||
-      typeof action.kind !== "string"
+      !validAction(action)
     ) {
       fail("invalid_input", 400);
     }
@@ -251,12 +302,99 @@ export function application({ db, BackendError }: Dependencies) {
         memberId,
         clientId,
         action,
+        round: typeof current.state.round === "number" ? current.state.round : undefined,
         createdAt: Date.now(),
       });
       return true;
     });
 
     return Response.json({ ok: true, version: room.version });
+  }
+
+  async function submitChat(code: string, request: Request): Promise<Response> {
+    const body = await readJson(request, MAX_CHAT_BODY);
+    const clientId = body?.clientId;
+    const memberId = body?.memberId;
+    if (typeof clientId !== "string" || !clientId || typeof memberId !== "string" || !memberId) {
+      fail("invalid_input", 400);
+    }
+
+    const text = typeof body?.text === "string" ? body.text.trim().slice(0, 300) : "";
+    const image = typeof body?.image === "string" ? body.image : "";
+    if (!text && !image) fail("invalid_input", 400);
+    if (image && (!image.startsWith("data:image/") || image.length > MAX_CHAT_IMAGE)) {
+      fail("invalid_input", 413);
+    }
+
+    const message: RoomChat = {
+      id: typeof body?.id === "string" && body.id.length <= 80 ? body.id : crypto.randomUUID(),
+      kind: "chat",
+      memberId,
+      text,
+      emoji: typeof body?.emoji === "string" ? body.emoji.slice(0, 8) : undefined,
+      image: image || undefined,
+      big: Boolean(body?.big),
+      at: Date.now(),
+    };
+
+    const room = await mutateRoom(code, (current) => {
+      const claim = current.players.find((player) => player.memberId === memberId);
+      if (!claim || claim.clientId !== clientId) fail("not_joined", 403);
+      current.chat = current.chat ?? [];
+      current.chat.push(message);
+      if (current.chat.length > 60) current.chat = current.chat.slice(-60);
+      const imageMessages = current.chat.filter((item) => item.image);
+      for (const old of imageMessages.slice(0, Math.max(0, imageMessages.length - 6))) {
+        old.image = undefined;
+      }
+      return true;
+    });
+
+    return Response.json({ ok: true, message, version: room.version });
+  }
+
+  async function updateSeats(code: string, request: Request): Promise<Response> {
+    const body = await readJson(request);
+    const hostId = body?.hostId;
+    const humanIds = body?.humanIds;
+    const hostMemberId = body?.hostMemberId;
+    if (typeof hostId !== "string" || !hostId) fail("invalid_input", 400);
+    if (
+      !Array.isArray(humanIds) ||
+      humanIds.length < 1 ||
+      humanIds.length > 10 ||
+      new Set(humanIds).size !== humanIds.length ||
+      !humanIds.every((value: unknown) => typeof value === "string" && value.length <= 24)
+    ) {
+      fail("invalid_input", 400);
+    }
+
+    const room = await mutateRoom(code, (current) => {
+      if (current.hostId !== hostId) fail("host_only", 403);
+      if (current.state) fail("seats_locked", 409);
+      const hostPlayer = current.players.find((player) => player.clientId === hostId);
+      const nextHostMemberId =
+        typeof hostMemberId === "string" && hostMemberId ? hostMemberId : hostPlayer?.memberId;
+      if (!nextHostMemberId || !humanIds.includes(nextHostMemberId)) {
+        fail("host_seat_required", 400);
+      }
+      const targetClaim = current.players.find((player) => player.memberId === nextHostMemberId);
+      if (targetClaim && targetClaim.clientId !== hostId) fail("seat_taken", 409);
+      const joinedAt = hostPlayer?.joinedAt ?? Date.now();
+      current.humanIds = humanIds;
+      current.players = current.players.filter(
+        (player) => player.clientId !== hostId && humanIds.includes(player.memberId),
+      );
+      current.players.push({
+        memberId: nextHostMemberId,
+        clientId: hostId,
+        name: "房主",
+        joinedAt,
+      });
+      return true;
+    });
+
+    return Response.json(view(room, true));
   }
 
   async function publishState(code: string, request: Request): Promise<Response> {
@@ -344,6 +482,8 @@ export function application({ db, BackendError }: Dependencies) {
       }
       if (suffix === "/join" && method === "POST") return joinRoom(code, request);
       if (suffix === "/action" && method === "POST") return submitAction(code, request);
+      if (suffix === "/chat" && method === "POST") return submitChat(code, request);
+      if (suffix === "/seats" && method === "POST") return updateSeats(code, request);
       if (suffix === "/state" && method === "POST") return publishState(code, request);
       if (suffix === "/ack" && method === "POST") return ackAction(code, request);
       if (suffix === "/close" && method === "POST") return closeRoom(code, request);

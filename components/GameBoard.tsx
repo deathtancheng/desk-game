@@ -3,14 +3,29 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ackCloudAction, fetchCloudRoom, publishCloudState } from "@/lib/cloudClient";
-import { getMemberOf, getRoundPrompt } from "@/lib/gameEngine";
+import { PLAN_RULE_SHEETS } from "@/lib/compiler";
+import {
+  activePlayers,
+  getCurrentRuleType,
+  getMemberOf,
+} from "@/lib/gameEngine";
 import type { ActionChoice, RoomPlayer } from "@/lib/types";
 import { useGameStore } from "@/store/gameStore";
 import ActionPanel from "./ActionPanel";
+import ChatComposer, { type ChatSpeaker } from "./ChatComposer";
 import ChatMessage from "./ChatMessage";
+import EventCard from "./EventCard";
+import EventTrack from "./EventTrack";
+import PawnIcon from "./PawnIcon";
 import RoundResultCard from "./RoundResultCard";
 import RuleSheet from "./RuleSheet";
 import Scoreboard from "./Scoreboard";
+
+const KIND_LABEL = {
+  negotiation: "谈判",
+  bidding: "竞标",
+  escape: "逃脱",
+} as const;
 
 export default function GameBoard() {
   const game = useGameStore((state) => state.game);
@@ -19,6 +34,8 @@ export default function GameBoard() {
   const goSettlement = useGameStore((state) => state.goSettlement);
   const judging = useGameStore((state) => state.judging);
   const judgeError = useGameStore((state) => state.judgeError);
+  const postChat = useGameStore((state) => state.postChat);
+  const ingestChats = useGameStore((state) => state.ingestChats);
   const cloudMode = useGameStore((state) => state.cloudMode);
   const cloudRole = useGameStore((state) => state.cloudRole);
   const roomCode = useGameStore((state) => state.roomCode);
@@ -26,7 +43,6 @@ export default function GameBoard() {
   const cloudHostMemberId = useGameStore((state) => state.cloudHostMemberId);
   const closeCloudRoom = useGameStore((state) => state.closeCloudRoom);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [seconds, setSeconds] = useState(60);
   const [showGoal, setShowGoal] = useState(false);
   const [copied, setCopied] = useState(false);
   const [cloudPlayers, setCloudPlayers] = useState<RoomPlayer[]>([]);
@@ -35,16 +51,6 @@ export default function GameBoard() {
   const processingRef = useRef(false);
   gameRef.current = game;
   judgingRef.current = judging;
-
-  useEffect(() => {
-    const timer = setInterval(() => setSeconds((value) => (value <= 0 ? 0 : value - 1)), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (!game) return;
-    setSeconds(Math.floor(180 / game.config.rounds));
-  }, [game?.round, game?.config.rounds]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -67,16 +73,35 @@ export default function GameBoard() {
 
     let cancelled = false;
     const tick = async () => {
-      if (cancelled || processingRef.current || judgingRef.current) return;
-      const currentGame = gameRef.current;
-      if (!currentGame || currentGame.phase !== "action") return;
+      if (cancelled) return;
 
       try {
         const room = await fetchCloudRoom(roomCode, cloudClientId);
         if (!cancelled) setCloudPlayers(room?.players ?? []);
+
+        if (processingRef.current || judgingRef.current) return;
+        if (room?.chat?.length) ingestChats(room.chat);
+
+        const currentGame = gameRef.current;
+        if (!currentGame || currentGame.phase !== "action") return;
         if (!room?.pending?.length) return;
+
         const currentPlayer = currentGame.players[currentGame.pendingIndex];
-        const pending = room.pending.find((item) => item.memberId === currentPlayer?.memberId);
+        if (!currentPlayer || !currentPlayer.isHuman || currentPlayer.eliminated) return;
+        const candidates = room.pending.filter((item) => item.memberId === currentPlayer.memberId);
+        const pending = candidates.find(
+          (item) => item.round === undefined || item.round === currentGame.round,
+        );
+        const stale = candidates.filter(
+          (item) => item.round !== undefined && item.round !== currentGame.round,
+        );
+        if (stale.length > 0) {
+          await Promise.all(
+            stale.map((item) =>
+              ackCloudAction(roomCode, cloudClientId, item.id).catch(() => {}),
+            ),
+          );
+        }
         if (!pending) return;
 
         processingRef.current = true;
@@ -90,57 +115,74 @@ export default function GameBoard() {
     };
 
     tick();
-    const timer = setInterval(tick, 1200);
+    const timer = setInterval(tick, 1000);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [cloudMode, cloudRole, roomCode, cloudClientId, chooseAction]);
+  }, [cloudMode, cloudRole, roomCode, cloudClientId, chooseAction, ingestChats]);
 
   if (!game) return null;
 
   const current = game.players[game.pendingIndex];
   const currentMember = current ? getMemberOf(game, current) : null;
-  const prompt = getRoundPrompt(game.config, game.round);
-  const clock =
-    seconds <= 0
-      ? "超时"
-      : `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-  const urgent = seconds <= 15;
+  const active = activePlayers(game);
+  const humanCount = game.players.filter((player) => player.isHuman).length;
+  const ghostCount = game.players.length - humanCount;
+  const kind = getCurrentRuleType(game);
   const isGuestTurn = Boolean(
     cloudMode &&
       cloudRole === "host" &&
       current?.isHuman &&
+      !current.eliminated &&
       current.memberId !== cloudHostMemberId &&
       game.phase === "action",
   );
-  const humanCount = game.players.filter((player) => player.isHuman).length;
-  const joinedCount = cloudPlayers.filter((player) =>
-    game.players.some((gamePlayer) => gamePlayer.memberId === player.memberId && gamePlayer.isHuman),
-  ).length;
+  const joinedCount = Math.max(
+    cloudRole === "host" ? 1 : 0,
+    cloudPlayers.filter((player) =>
+      game.players.some((gamePlayer) => gamePlayer.memberId === player.memberId && gamePlayer.isHuman),
+    ).length,
+  );
   const currentGuestJoined = cloudPlayers.some((player) => player.memberId === current?.memberId);
   const proxyAction: ActionChoice =
-    game.config.ruleType === "bidding"
+    kind === "bidding"
       ? { kind: "abstain" }
-      : game.config.ruleType === "escape"
+      : kind === "escape"
         ? { kind: "contribute", contribution: 0 }
         : { kind: "pass" };
   const proxyLabel =
-    game.config.ruleType === "bidding"
-      ? "托管：替 TA 弃权"
-      : game.config.ruleType === "escape"
-        ? "托管：替 TA 出 0"
-        : "托管：替 TA 装死";
+    kind === "bidding" ? "托管：替 TA 弃权" : kind === "escape" ? "托管：替 TA 出 0" : "托管：替 TA 装死";
+
+  const humanPlayers = game.players.filter((player) => player.isHuman);
+  const hostSpeaker = humanPlayers.find((player) => player.memberId === cloudHostMemberId);
+  const chatSpeakers: ChatSpeaker[] =
+    cloudMode && cloudRole === "host"
+      ? (hostSpeaker ? [hostSpeaker] : humanPlayers.slice(0, 1)).map((player) => {
+          const member = getMemberOf(game, player);
+          return { id: member.id, name: member.name, emoji: member.emoji };
+        })
+      : humanPlayers.map((player) => {
+          const member = getMemberOf(game, player);
+          return { id: member.id, name: member.name, emoji: member.emoji };
+        });
+  const defaultSpeakerId =
+    cloudMode && cloudRole === "host"
+      ? chatSpeakers[0]?.id ?? game.players[0].memberId
+      : current && current.isHuman
+        ? current.memberId
+        : chatSpeakers[0]?.id ?? game.players[0].memberId;
 
   const copyInvite = async () => {
     if (!roomCode || typeof window === "undefined") return;
     const url = `${window.location.origin}/?join=${roomCode}`;
+    const invite = `群戏邀请码：${roomCode}\n${url}`;
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(invite);
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      window.prompt("把链接发给室友：", url);
+      window.prompt("把邀请码发给室友：", invite);
     }
   };
 
@@ -155,9 +197,9 @@ export default function GameBoard() {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-bold">{game.config.groupName}</span>
-                <span className="pill !py-0.5">{game.config.ruleTitle}</span>
+                <span className="pill !py-0.5">淘汰赛 · 无时限</span>
                 <span className="pill !py-0.5">
-                  第 {game.round} / {game.config.rounds} 回合
+                  事件 {game.round} / {game.config.maxEvents}
                 </span>
                 {cloudMode && roomCode && (
                   <span className="pill !py-0.5 text-neon">
@@ -166,8 +208,8 @@ export default function GameBoard() {
                 )}
               </div>
               <div className="mt-0.5 text-[10px] text-muted">
-                6 人宿舍 · {game.players.filter((player) => player.isHuman).length} 真人 +{" "}
-                {game.players.filter((player) => !player.isHuman).length} 幽灵
+                {game.players.length} 人群 · {humanCount} 真人 + {ghostCount} 策略 AI · 场上 {active.length} 人
+                {humanCount === 1 && " · 单人局主角保护"}
                 {cloudMode && " · 房主这台电脑是牌桌"}
               </div>
             </div>
@@ -175,8 +217,12 @@ export default function GameBoard() {
 
           <div className="flex items-center gap-2">
             {cloudMode && roomCode && (
-              <button className="btn-ghost !px-2.5 !py-1.5 text-[9px]" onClick={copyInvite}>
-                {copied ? "已复制" : "邀请"}
+              <button
+                className="btn-ghost !px-2.5 !py-1.5 text-[9px]"
+                onClick={copyInvite}
+                title="复制邀请码和邀请链接"
+              >
+                {copied ? "已复制" : "邀请码 / 链接"}
               </button>
             )}
             {cloudMode && cloudRole === "host" && (
@@ -191,62 +237,63 @@ export default function GameBoard() {
                 结束房间
               </button>
             )}
-            <div
-              className={`rounded-xl border px-3 py-1.5 text-right ${
-                urgent ? "border-ember/40 bg-ember/10 text-ember" : "border-line bg-panel2/50 text-neon"
-              }`}
-            >
-              <div className="text-[8px] tracking-[0.14em] text-muted">本回合</div>
-              <div className="font-mono text-lg font-black leading-5">{clock}</div>
+            <div className="hidden rounded-xl border border-line bg-panel2/50 px-3 py-1.5 text-right sm:block">
+              <div className="text-[8px] tracking-[0.14em] text-muted">淘汰规则</div>
+              <div className="font-mono text-[11px] font-black leading-5 text-neon">最低分出局</div>
             </div>
             <div className="hidden items-center gap-1.5 rounded-xl border border-line/60 bg-panel2/40 px-2.5 py-2 text-[9px] text-muted sm:flex">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-mint" />
-              规则骨架已锁定
+              <span className={`h-1.5 w-1.5 rounded-full ${kind === "negotiation" ? "bg-ember" : kind === "bidding" ? "bg-neon" : "bg-mint"}`} />
+              本事件 · {KIND_LABEL[kind]}
             </div>
           </div>
         </div>
 
-        <Scoreboard game={game} currentId={current?.memberId} />
+        <Scoreboard game={game} currentId={current?.memberId} phase={game.phase} />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.85fr)]">
-        <section className="panel flex h-[calc(100vh-260px)] min-h-[520px] flex-col overflow-hidden">
-          <div className="flex items-center justify-between border-b border-line/60 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-mint" />
-              <span className="text-[11px] font-semibold text-white/75">群聊 · 本局牌桌</span>
+        <section className="table-frame order-2 h-[62vh] min-h-[440px] lg:order-1 lg:h-[calc(100vh-260px)] lg:min-h-[560px]">
+          <div className="table-felt h-full">
+            <div className="flex items-center justify-between border-b border-[#c9a15e]/20 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <PawnIcon className="h-3.5 w-3.5 text-[#d8bb85]" />
+                <span className="text-[11px] font-semibold text-[#f0dfc2]">本局牌桌 · 群聊</span>
+              </div>
+              <span className="text-[9px] tracking-[0.14em] text-[#c7b89e]/65">回合外也能聊</span>
             </div>
-            <span className="text-[9px] tracking-[0.14em] text-muted">牌桌就是群聊</span>
-          </div>
 
-          <div className="px-3 pt-3">
-            <RuleSheet title={game.config.ruleTitle} lines={game.config.ruleSheet} />
-          </div>
-
-          <div ref={scrollRef} className="chat-scroll flex-1 space-y-1 overflow-y-auto px-3 py-2">
-            {game.log.map((message) => (
-              <ChatMessage key={message.id} message={message} />
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2 border-t border-line/60 px-3 py-2.5">
-            <span className="text-sm">🙂</span>
-            <div className="flex-1 rounded-xl border border-line/50 bg-ink/30 px-3 py-2 text-[10px] text-white/25">
-              群里只能发表情，不能发表情包……
+            <div className="px-3 pt-2.5">
+              <EventTrack
+                round={game.round}
+                maxEvents={game.config.maxEvents}
+                done={game.phase === "done"}
+              />
             </div>
-            <span className="rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-[9px] text-white/30">发送</span>
+
+            <div className="px-3 pt-1">
+              <RuleSheet
+                title={`${KIND_LABEL[kind]} · 第 ${game.round} 个事件`}
+                lines={PLAN_RULE_SHEETS[kind]}
+              />
+            </div>
+
+            <div ref={scrollRef} className="chat-scroll flex-1 space-y-1 overflow-y-auto px-3 py-2">
+              {game.log.map((message) => (
+                <ChatMessage key={message.id} message={message} />
+              ))}
+            </div>
+
+            <ChatComposer
+              speakers={chatSpeakers}
+              defaultSpeakerId={defaultSpeakerId}
+              onSend={postChat}
+              placeholder="随时说点什么；梗和吐槽都会进入人设判定"
+            />
           </div>
         </section>
 
-        <aside className="space-y-3">
-          <div className="panel p-4">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[9px] tracking-[0.16em] text-muted">本回合</span>
-              <span className="pill !py-0.5">{prompt.badge}</span>
-            </div>
-            <h2 className="mt-1.5 font-serif text-base font-bold text-white">{prompt.title}</h2>
-            <p className="mt-1 text-[10px] leading-5 text-muted">{prompt.subtitle}</p>
-          </div>
+        <aside className="order-1 space-y-3 lg:order-2">
+          <EventCard game={game} />
 
           {isGuestTurn ? (
             <div className="rounded-2xl border border-mint/25 bg-mint/[0.05] p-5">
@@ -256,28 +303,37 @@ export default function GameBoard() {
               <p className="mt-1 text-[10px] leading-5 text-muted">
                 云端 {joinedCount}/{humanCount} 已加入
                 {!currentGuestJoined ? " · 这个位置还没人" : ""}。房主页面别关，对方提交后会自动同步。
+                如果手机掉线或暂时没空，房主可以先替 TA 托管这一步。
               </p>
-              {!currentGuestJoined && (
-                <button
-                  className="btn-ghost mt-3 w-full !py-2 text-[10px]"
-                  onClick={() => chooseAction(proxyAction)}
-                >
-                  {proxyLabel}
-                </button>
-              )}
+              <button
+                className="btn-ghost mt-3 w-full !py-2 text-[10px]"
+                onClick={() => {
+                  if (
+                    currentGuestJoined &&
+                    !window.confirm(
+                      `${currentMember?.name ?? "室友"} 还没提交。房主替 TA 出牌后，TA 这一步的动作会被忽略。继续吗？`,
+                    )
+                  ) {
+                    return;
+                  }
+                  chooseAction(proxyAction);
+                }}
+              >
+                {currentGuestJoined ? "等太久了？房主托管这一步" : proxyLabel}
+              </button>
               <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
                 <div className="h-full w-1/2 animate-pulse rounded-full bg-mint" />
               </div>
             </div>
           ) : judging ? (
             <JudgeLoading />
-          ) : game.phase === "action" && current && currentMember ? (
+          ) : game.phase === "action" && current && currentMember && !current.eliminated ? (
             <>
-              <div className="flex items-center gap-2 rounded-xl border border-neon/25 bg-neon/[0.05] px-3 py-2">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neon" />
-                <span className="text-[10px] text-white/70">
-                  轮到 <span className="font-bold text-neon">{currentMember.name}</span>
-                  {game.players.filter((player) => player.isHuman).length > 1 && " · 把设备交给 TA"}
+              <div className="flex items-center gap-2 rounded-xl border border-[#c9a15e]/30 bg-[#c9a15e]/10 px-3 py-2">
+                <PawnIcon className="h-3.5 w-3.5 text-[#e2c582]" />
+                <span className="text-[10px] text-[#f0dfc2]/85">
+                  轮到 <span className="font-bold text-[#f0c27a]">{currentMember.name}</span>
+                  {cloudMode ? " · 这是你的回合" : humanCount > 1 ? " · 把设备交给 TA" : ""}
                 </span>
               </div>
               <ActionPanel
@@ -298,7 +354,7 @@ export default function GameBoard() {
           )}
 
           <div className="rounded-xl border border-line/50 bg-panel2/30 px-3 py-2.5 text-[9px] leading-4 text-muted">
-            <span className="text-mint">群主怎么看</span>：动作像你的标签 +1，出戏 -1；隐藏诉求结算时揭晓。
+            <span className="text-mint">群主怎么看</span>：动作像你的标签 +1，出戏 -1；闲聊也会被人设裁判参考。隐藏诉求终局揭晓。
           </div>
         </aside>
       </div>
@@ -333,8 +389,8 @@ export default function GameBoard() {
               </div>
               <div className="mt-3 space-y-1 text-[10px] leading-5 text-white/55">
                 <div>你的标签：{currentMember.tags.join(" / ")}</div>
-                <div>当前群地位：{current.gp} 点 · 剩余出力：{current.tokens} 点</div>
-                <div>达成隐藏诉求：结算时 +3 点。</div>
+                <div>当前群地位：{current.gp} 点 · 本次出力：{current.tokens} 点</div>
+                <div>达成隐藏诉求：终局 +3 点，可能改变冠军。</div>
               </div>
               <button className="btn-primary mt-5 w-full !py-2.5 text-xs" onClick={() => setShowGoal(false)}>
                 记住了
@@ -357,7 +413,7 @@ function JudgeLoading() {
         </div>
         <div>
           <div className="text-sm font-bold text-white">群主正在判断人设…</div>
-          <div className="mt-0.5 text-[10px] text-muted">正在读你们的标签和这回合的行动</div>
+          <div className="mt-0.5 text-[10px] text-muted">正在读你们的标签、行动和刚才的闲聊</div>
         </div>
       </div>
       <div className="mt-4 h-1 overflow-hidden rounded-full bg-white/10">

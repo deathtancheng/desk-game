@@ -52,6 +52,42 @@ export default function ChatMessage({ message }: { message: ChatMessageType }) {
     );
   }
 
+  if (message.kind === "chat") {
+    return (
+      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="my-2 flex gap-2">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-sm">
+          {message.avatar ?? message.emoji ?? "🙂"}
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-[9px] text-white/35">
+            <span>{message.author ?? "群友"}</span>
+            <span className="rounded bg-white/5 px-1 text-[8px] text-muted">闲聊</span>
+          </div>
+          {message.image ? (
+            <div className="mt-1 inline-block rounded-2xl rounded-tl-md border border-line/70 bg-white/[0.04] p-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={message.image}
+                alt={`${message.author ?? "群友"}发的图片`}
+                className="max-h-52 max-w-[240px] rounded-xl object-cover"
+              />
+              {message.text && <div className="px-1 pb-1 pt-1.5 text-[10px] text-white/60">{message.text}</div>}
+            </div>
+          ) : message.big ? (
+            <div className="mt-1 inline-flex items-center gap-2 rounded-2xl rounded-tl-md border border-neon/20 bg-neon/[0.06] px-3 py-2">
+              <span className="text-2xl">{message.emoji ?? "🙂"}</span>
+              <span className="font-serif text-sm font-bold text-white/80">{message.text}</span>
+            </div>
+          ) : (
+            <div className="mt-0.5 inline-block rounded-2xl rounded-tl-md border border-line/70 bg-white/[0.04] px-3 py-2 text-xs leading-5 text-white/75">
+              {message.text}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    );
+  }
+
   const isHost = message.kind === "host";
   const toneClass =
     message.tone === "good"

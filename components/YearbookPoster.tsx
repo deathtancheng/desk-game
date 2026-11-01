@@ -101,7 +101,7 @@ export default function YearbookPoster({ yearbook, game, date }: YearbookPosterP
               letterSpacing: "0.14em",
             }}
           >
-            {game.config.rounds} 回合 · {game.players.length} 人局
+            {game.config.maxEvents} 个事件 · {game.players.length} 人 · 淘汰赛
           </div>
           <div style={{ marginTop: 8, fontSize: 10, color: MUTED }}>{date}</div>
         </div>
@@ -143,6 +143,9 @@ export default function YearbookPoster({ yearbook, game, date }: YearbookPosterP
                     {entry.member.name}
                   </div>
                   <div style={{ fontSize: 9, color: MUTED }}>{entry.title}</div>
+                  {entry.player.eliminated && (
+                    <div style={{ marginTop: 2, fontSize: 8, color: ACCENT }}>第 {entry.player.eliminatedAt ?? "?"} 个事件出局</div>
+                  )}
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>

@@ -7,8 +7,12 @@ function countActions(player: PlayerState, kinds: string[]): number {
 
 function quoteFor(game: GameState, player: PlayerState, fallback: string): string {
   const member = getMemberOf(game, player);
-  const own = game.log.filter((message) => message.kind === "player" && message.author === member.name);
-  return own.length > 0 ? own[own.length - 1].text : fallback;
+  const own = game.log.filter(
+    (message) =>
+      (message.kind === "player" || message.kind === "chat") && message.author === member.name && message.text,
+  );
+  const text = own.length > 0 ? own[own.length - 1].text.replace(/[（(]幽灵群友[）)]/g, "").trim() : "";
+  return text || fallback;
 }
 
 interface Metric {
@@ -91,7 +95,7 @@ export function buildYearbook(game: GameState): Yearbook {
     return {
       member,
       player,
-      title: titleMap.get(player.memberId) ?? "最佳群友",
+      title: player.eliminated ? "提前下班奖" : titleMap.get(player.memberId) ?? "最佳群友",
       quote: quoteFor(game, player, member.quote),
     };
   });
@@ -108,7 +112,10 @@ export function buildYearbook(game: GameState): Yearbook {
             line.includes("流拍") ||
             line.includes("隐藏诉求") ||
             line.includes("甩锅") ||
-            line.includes("摸鱼"),
+            line.includes("摸鱼") ||
+            line.includes("出局") ||
+            line.includes("冠军") ||
+            line.includes("本局结束"),
         ),
     ),
   ].slice(0, 3);
@@ -136,9 +143,12 @@ export function buildYearbook(game: GameState): Yearbook {
 
   const top = rankPlayers(game)[0];
   const backstab = entries.find((entry) => entry.title === "年度最佳背锅侠");
+  const outCount = game.players.filter((player) => player.eliminated).length;
   const summary = `${game.config.groupName} 的《${game.config.ruleTitle.replace(/[《》]/g, "")}》结束：${
     top ? getMemberOf(game, top).name : "群主"
-  } 以 ${top?.gp ?? 0} 点成为本局群主${backstab ? `，${backstab.member.name} 拿下年度最佳背锅侠` : ""}。`;
+  } 以 ${top?.gp ?? 0} 点成为本局群主${outCount > 0 ? `，${outCount} 人提前出局` : ""}${
+    backstab ? `，${backstab.member.name} 拿下年度最佳背锅侠` : ""
+  }。`;
 
   return { entries, moments, radar, summary };
 }

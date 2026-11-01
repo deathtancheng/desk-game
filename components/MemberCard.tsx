@@ -9,6 +9,7 @@ interface MemberCardProps {
   player?: PlayerState;
   highlight?: boolean;
   compact?: boolean;
+  host?: boolean;
 }
 
 const STAT_LABELS: { key: keyof Member["stats"]; label: string }[] = [
@@ -18,7 +19,7 @@ const STAT_LABELS: { key: keyof Member["stats"]; label: string }[] = [
   { key: "scapegoat", label: "背锅" },
 ];
 
-export default function MemberCard({ member, isHuman, onToggle, player, highlight, compact }: MemberCardProps) {
+export default function MemberCard({ member, isHuman, onToggle, player, highlight, compact, host }: MemberCardProps) {
   const content = (
     <>
       <div className="flex items-start justify-between gap-2">
@@ -40,7 +41,7 @@ export default function MemberCard({ member, isHuman, onToggle, player, highligh
                   isHuman ? "bg-neon/15 text-neon" : "bg-white/5 text-muted"
                 }`}
               >
-                {isHuman ? "真人" : "幽灵群友"}
+                {isHuman ? (host ? "房主" : "真人") : "幽灵群友"}
               </span>
             </div>
             <div className="mt-0.5 font-serif text-[10px] italic text-muted">{member.quote}</div>

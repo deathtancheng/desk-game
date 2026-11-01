@@ -1,7 +1,8 @@
-import type { RoomAction, RoomPlayer, RoomView } from "./types";
+import type { ChatMessage, RoomAction, RoomPlayer, RoomView } from "./types";
 
 export interface Room extends RoomView {
   pending: RoomAction[];
+  chat: ChatMessage[];
   createdAt: number;
   updatedAt: number;
 }
@@ -52,6 +53,7 @@ export function createRoom(
     players: [host],
     state: null,
     pending: [],
+    chat: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -76,6 +78,7 @@ export function toView(room: Room, includePending: boolean): RoomView {
     state: room.state,
   };
   if (includePending) view.pending = room.pending;
+  if (includePending) view.chat = room.chat;
   return view;
 }
 

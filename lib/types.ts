@@ -6,7 +6,11 @@ export type SkillKey =
   | "immune_ooc"
   | "save_group"
   | "slack_bonus"
-  | "radio";
+  | "radio"
+  | "shield"
+  | "steal"
+  | "discount"
+  | "rally";
 
 export type Screen = "import" | "compiling" | "lobby" | "board" | "settlement";
 
@@ -16,6 +20,8 @@ export type ActionKind =
   | "meme"
   | "pass"
   | "volunteer"
+  | "underbid"
+  | "back"
   | "bid"
   | "abstain"
   | "coalition"
@@ -64,6 +70,32 @@ export interface GameEvent {
   difficulty: number;
 }
 
+export interface EventPlan {
+  id: string;
+  kind: RuleType;
+  title: string;
+  quote: string;
+  stakes: string;
+  difficulty: number;
+  lot?: Lot;
+  challenge?: Challenge;
+  twist?: Twist;
+  bounty?: Bounty;
+}
+
+export interface Twist {
+  key: "generous" | "anonymous" | "amnesty" | "comeback" | "tax" | "spotlight" | "swap" | "silence";
+  title: string;
+  desc: string;
+}
+
+export interface Bounty {
+  key: "proposer" | "cheap_win" | "mvp" | "meme" | "no_skill" | "slacker" | "comeback" | "risky" | "underbid";
+  title: string;
+  desc: string;
+  reward: number;
+}
+
 export interface Lot {
   id: string;
   name: string;
@@ -98,11 +130,14 @@ export interface GameConfig {
   ruleTitle: string;
   ruleSheet: string[];
   rounds: number;
+  maxEvents: number;
+  elimination: boolean;
   members: Member[];
   event: GameEvent;
   events: GameEvent[];
   lots: Lot[];
   challenges: Challenge[];
+  plans: EventPlan[];
   signals: ChatSignal;
 }
 
@@ -113,6 +148,7 @@ export interface ActionChoice {
   bid?: number;
   contribution?: number;
   useSkill?: boolean;
+  memeText?: string;
 }
 
 export interface PlayerState {
@@ -120,11 +156,13 @@ export interface PlayerState {
   isHuman: boolean;
   gp: number;
   tokens: number;
+  eliminated: boolean;
   goalKey: GoalKey;
   goalText: string;
   goalTargetId?: string;
   goalLotId?: string;
   goalDone: boolean;
+  eliminatedAt?: number;
   skillKey: SkillKey;
   skillName: string;
   skillDesc: string;
@@ -145,10 +183,15 @@ export interface PlayerState {
 
 export interface ChatMessage {
   id: string;
-  kind: "event" | "player" | "system" | "host" | "result" | "title";
+  kind: "event" | "player" | "system" | "host" | "result" | "title" | "chat";
   author?: string;
   emoji?: string;
+  avatar?: string;
   text: string;
+  memberId?: string;
+  image?: string;
+  big?: boolean;
+  at?: number;
   tone?: "normal" | "good" | "bad" | "glow";
 }
 
@@ -160,6 +203,8 @@ export interface RoundResult {
   deltas: Record<string, number>;
   personaLine?: string;
   judgeSource?: "llm" | "local";
+  eliminatedIds?: string[];
+  winnerId?: string;
 }
 
 export interface PersonaVerdict {
@@ -184,6 +229,7 @@ export interface PersonaJudgePlayer {
   name: string;
   tags: string[];
   action: PersonaActionPayload;
+  chat?: string[];
 }
 
 export interface PersonaJudgeRequest {
@@ -211,6 +257,7 @@ export interface RoomAction {
   memberId: string;
   clientId: string;
   action: ActionChoice;
+  round?: number;
   createdAt: number;
 }
 
@@ -223,6 +270,7 @@ export interface RoomView {
   players: RoomPlayer[];
   state: GameState | null;
   pending?: RoomAction[];
+  chat?: ChatMessage[];
 }
 
 export interface GameState {
@@ -237,6 +285,7 @@ export interface GameState {
   hostName: string;
   hostEmoji: string;
   passedChallenges: number;
+  challengeAttempts: number;
   unsoldLots: number;
 }
 
